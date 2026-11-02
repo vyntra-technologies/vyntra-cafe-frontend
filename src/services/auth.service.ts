@@ -4,6 +4,8 @@ import { ApiResponse, IAuthResponse, IUser } from '../types';
 export interface LoginPayload {
   email: string;
   password: string;
+  role?: string;
+  selectedRole?: string;
 }
 
 export interface RegisterPayload {

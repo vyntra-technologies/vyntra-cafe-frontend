@@ -59,7 +59,7 @@ import {
   FiCheck,
 } from 'react-icons/fi';
 import { MdTableRestaurant } from 'react-icons/md';
-import { StaffLayout } from '../../components/staff/StaffLayout';
+import { WaiterLayout } from '../../components/staff/WaiterLayout';
 import { waiterService } from '../../services/waiter.service';
 import { menuService } from '../../services/menu.service';
 import { socketService } from '../../services/socket.service';
@@ -86,6 +86,17 @@ export const WaiterDashboardPage: React.FC = () => {
   // Filter states
   const [tableSection, setTableSection] = useState<string>('all');
   const [orderFilter, setOrderFilter] = useState<string>('active');
+  const [activeTabName, setActiveTabName] = useState<string>('tables');
+
+  const tabIndex = activeTabName === 'ready' ? 2 : activeTabName === 'orders' ? 1 : 0;
+  const handleTabIndexChange = (index: number) => {
+    if (index === 0) setActiveTabName('tables');
+    else if (index === 1) setActiveTabName('orders');
+    else if (index === 2) setActiveTabName('ready');
+  };
+  const handleNavTabChange = (tabId: string) => {
+    setActiveTabName(tabId);
+  };
 
   // New Order Modal State
   const {
@@ -338,12 +349,14 @@ export const WaiterDashboardPage: React.FC = () => {
   const occupiedCount = tables.filter((t) => t.status === 'occupied').length;
 
   return (
-    <StaffLayout
-      terminalName="Waiter Service Terminal"
-      terminalBadge="Dine-in & Service"
-      badgeColor="teal"
+    <WaiterLayout
+      activeTab={activeTabName}
+      onTabChange={handleNavTabChange}
       onRefresh={handleRefresh}
       isRefreshing={refreshing}
+      activeOrderCount={filteredOrders.length}
+      readyOrderCount={readyOrders.length}
+      onNewOrder={() => handleOpenNewOrder()}
     >
       {/* Top Banner Alert for Food Ready for Pickup */}
       {readyOrders.length > 0 && (
@@ -447,7 +460,7 @@ export const WaiterDashboardPage: React.FC = () => {
       </SimpleGrid>
 
       {/* Main Tabs: Floor Plan Tables vs Assigned Orders */}
-      <Tabs colorScheme="teal" variant="enclosed">
+      <Tabs index={tabIndex} onChange={handleTabIndexChange} colorScheme="teal" variant="enclosed">
         <TabList borderBottom="1px solid" borderColor={borderCol} mb={4}>
           <Tab fontWeight="bold" fontSize="sm">
             Floor Plan & Tables ({tables.length})
@@ -1002,7 +1015,7 @@ export const WaiterDashboardPage: React.FC = () => {
           </ModalFooter>
         </ModalContent>
       </Modal>
-    </StaffLayout>
+    </WaiterLayout>
   );
 };
 

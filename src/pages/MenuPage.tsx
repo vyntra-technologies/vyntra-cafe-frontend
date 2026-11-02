@@ -45,7 +45,7 @@ export const MenuPage: React.FC = () => {
   // Filters state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>(categoryParam);
-  const [priceRange, setPriceRange] = useState<[number, number]>([0, 30]);
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 2000]);
   const [isVegetarian, setIsVegetarian] = useState(false);
   const [isVegan, setIsVegan] = useState(false);
   const [isGlutenFree, setIsGlutenFree] = useState(false);
@@ -70,153 +70,7 @@ export const MenuPage: React.FC = () => {
     ])
       .then(([cats, itemsRes]) => {
         setCategories(cats);
-        if (itemsRes.items.length > 0) {
-          setMenuItems(itemsRes.items);
-        } else {
-          // Provide rich mock items if backend seed is clean
-          setMenuItems([
-            {
-              _id: 'item-1',
-              name: 'Signature Caramel Macchiato',
-              slug: 'signature-caramel-macchiato',
-              description: 'Freshly steamed milk with vanilla-flavored syrup, marked with espresso and topped with caramel drizzle.',
-              category: cats[0]?._id || 'cat-1',
-              images: ['https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&w=800&q=80'],
-              basePrice: 5.25,
-              variants: [
-                { name: 'Small (12oz)', priceAdjustment: 0.0, isDefault: true },
-                { name: 'Regular (16oz)', priceAdjustment: 0.75 },
-                { name: 'Large (20oz)', priceAdjustment: 1.5 },
-              ],
-              addOns: [
-                { name: 'Extra Espresso Shot', price: 1.0 },
-                { name: 'Oat Milk Sub', price: 0.8 },
-                { name: 'Extra Caramel Drizzle', price: 0.5 },
-              ],
-              ingredients: ['Espresso', 'Milk', 'Vanilla Syrup', 'Caramel'],
-              allergens: ['Dairy'],
-              isVegetarian: true,
-              isVegan: false,
-              isGlutenFree: true,
-              preparationTimeMinutes: 5,
-              isAvailable: true,
-              isFeatured: true,
-              isBestseller: true,
-              taxPercentage: 5,
-            },
-            {
-              _id: 'item-2',
-              name: 'Smoked Turkey & Warm Brie Panini',
-              slug: 'smoked-turkey-warm-brie-panini',
-              description: 'Sliced smoked turkey, creamy French brie, cranberry compote and baby arugula on toasted artisan sourdough.',
-              category: cats[3]?._id || 'cat-4',
-              images: ['https://images.unsplash.com/photo-1528735602780-2552fd46c7af?auto=format&fit=crop&w=800&q=80'],
-              basePrice: 11.5,
-              variants: [],
-              addOns: [
-                { name: 'Side House Salad', price: 2.5 },
-                { name: 'Extra Brie Cheese', price: 2.0 },
-              ],
-              ingredients: ['Sourdough Bread', 'Smoked Turkey', 'Brie Cheese', 'Arugula', 'Cranberry'],
-              allergens: ['Gluten', 'Dairy'],
-              isVegetarian: false,
-              isVegan: false,
-              isGlutenFree: false,
-              preparationTimeMinutes: 10,
-              isAvailable: true,
-              isFeatured: true,
-              isBestseller: true,
-              taxPercentage: 5,
-            },
-            {
-              _id: 'item-3',
-              name: 'Butter French Croissant',
-              slug: 'butter-french-croissant',
-              description: 'Flaky golden brown traditional pastry crafted with Normandy churned butter.',
-              category: cats[2]?._id || 'cat-3',
-              images: ['https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&w=800&q=80'],
-              basePrice: 3.75,
-              variants: [],
-              addOns: [{ name: 'Artisan Jam & Butter', price: 0.75 }],
-              ingredients: ['Enriched Flour', 'Butter', 'Yeast', 'Sugar', 'Sea Salt'],
-              allergens: ['Gluten', 'Dairy'],
-              isVegetarian: true,
-              isVegan: false,
-              isGlutenFree: false,
-              preparationTimeMinutes: 2,
-              isAvailable: true,
-              isFeatured: false,
-              isBestseller: true,
-              taxPercentage: 5,
-            },
-            {
-              _id: 'item-4',
-              name: 'Ceremonial Grade Matcha Latte',
-              slug: 'ceremonial-grade-matcha-latte',
-              description: 'Finely stone-ground Uji matcha whisked with warm oat milk and light organic agave nectar.',
-              category: cats[1]?._id || 'cat-2',
-              images: ['https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&w=800&q=80'],
-              basePrice: 6.0,
-              variants: [
-                { name: 'Hot', priceAdjustment: 0 },
-                { name: 'Iced', priceAdjustment: 0.5 },
-              ],
-              addOns: [{ name: 'Boba Pearls', price: 0.75 }],
-              ingredients: ['Uji Matcha', 'Oat Milk', 'Agave'],
-              allergens: [],
-              isVegetarian: true,
-              isVegan: true,
-              isGlutenFree: true,
-              preparationTimeMinutes: 5,
-              isAvailable: true,
-              isFeatured: true,
-              isBestseller: true,
-              taxPercentage: 5,
-            },
-            {
-              _id: 'item-5',
-              name: 'Dark Chocolate Truffle Cheesecake',
-              slug: 'dark-chocolate-truffle-cheesecake',
-              description: 'Velvety 70% Belgian dark chocolate cheesecake on a crushed graham cracker and cocoa crust.',
-              category: cats[4]?._id || 'cat-5',
-              images: ['https://images.unsplash.com/photo-1533134242443-d4fd215305ad?auto=format&fit=crop&w=800&q=80'],
-              basePrice: 7.5,
-              variants: [],
-              addOns: [{ name: 'Whipped Espresso Cream', price: 1.0 }],
-              ingredients: ['Cream Cheese', 'Belgian Chocolate', 'Graham Crackers', 'Sugar'],
-              allergens: ['Dairy', 'Gluten'],
-              isVegetarian: true,
-              isVegan: false,
-              isGlutenFree: false,
-              preparationTimeMinutes: 3,
-              isAvailable: true,
-              isFeatured: true,
-              isBestseller: true,
-              taxPercentage: 5,
-            },
-            {
-              _id: 'item-6',
-              name: 'Avocado Tartine on Sourdough',
-              slug: 'avocado-tartine-on-sourdough',
-              description: 'Crushed Hass avocado, heirloom cherry tomatoes, toasted pumpkin seeds and chili flakes on grilled sourdough.',
-              category: cats[3]?._id || 'cat-4',
-              images: ['https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=800&q=80'],
-              basePrice: 9.75,
-              variants: [],
-              addOns: [{ name: 'Poached Organic Egg', price: 1.5 }],
-              ingredients: ['Avocado', 'Sourdough', 'Tomatoes', 'Pumpkin Seeds', 'Chili Flakes'],
-              allergens: ['Gluten'],
-              isVegetarian: true,
-              isVegan: true,
-              isGlutenFree: false,
-              preparationTimeMinutes: 8,
-              isAvailable: true,
-              isFeatured: false,
-              isBestseller: false,
-              taxPercentage: 5,
-            },
-          ]);
-        }
+        setMenuItems(itemsRes.items || []);
       })
       .finally(() => setIsLoading(false));
   }, []);
@@ -420,10 +274,10 @@ export const MenuPage: React.FC = () => {
                 </Flex>
                 <RangeSlider
                   aria-label={['min', 'max']}
-                  defaultValue={[0, 30]}
+                  defaultValue={[0, 2000]}
                   min={0}
-                  max={30}
-                  step={1}
+                  max={2000}
+                  step={25}
                   value={priceRange}
                   onChange={(val: [number, number]) => setPriceRange(val)}
                   colorScheme="orange"

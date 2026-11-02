@@ -80,7 +80,12 @@ export const AdminLoginPage: React.FC = () => {
 
     try {
       setIsSubmitting(true);
-      const authenticatedUser = await login({ email, password });
+      const authenticatedUser = await login({
+        email: email.trim(),
+        password,
+        role: 'ADMIN',
+        selectedRole: 'ADMIN',
+      });
 
       // Verify user has an admin / management role
       if (!ADMIN_MANAGEMENT_ROLES.includes(authenticatedUser.role)) {

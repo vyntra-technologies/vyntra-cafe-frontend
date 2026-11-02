@@ -86,18 +86,9 @@ export const CheckoutPage: React.FC = () => {
           setSelectedTableId(firstAvailable._id);
         }
       })
-      .catch(() => {
-        // Mock fallback tables if backend boot takes a moment
-        setTables([
-          { _id: 't-1', tableNumber: 'T-01', capacity: 2, section: 'Indoor Main', status: 'available', isActive: true },
-          { _id: 't-2', tableNumber: 'T-02', capacity: 2, section: 'Indoor Main', status: 'available', isActive: true },
-          { _id: 't-3', tableNumber: 'T-03', capacity: 4, section: 'Indoor Main', status: 'available', isActive: true },
-          { _id: 't-4', tableNumber: 'T-04', capacity: 6, section: 'Indoor Main', status: 'occupied', isActive: true },
-          { _id: 't-5', tableNumber: 'P-01', capacity: 2, section: 'Patio Terrace', status: 'available', isActive: true },
-          { _id: 't-6', tableNumber: 'P-02', capacity: 4, section: 'Patio Terrace', status: 'available', isActive: true },
-          { _id: 't-7', tableNumber: 'BAR-01', capacity: 1, section: 'Bar Counter', status: 'available', isActive: true },
-        ]);
-        setSelectedTableId('t-1');
+      .catch((err) => {
+        console.error('Failed to load floor tables:', err);
+        setTables([]);
       })
       .finally(() => setIsLoadingTables(false));
 

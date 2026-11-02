@@ -59,6 +59,9 @@ import { AdminInventoryReportsPage } from '../pages/admin/inventory/AdminInvento
 
 // Staff Terminals & Dashboards
 import { StaffLoginPage } from '../pages/staff/StaffLoginPage';
+import { WaiterLoginPage } from '../pages/staff/WaiterLoginPage';
+import { ChefLoginPage } from '../pages/staff/ChefLoginPage';
+import { CashierLoginPage } from '../pages/staff/CashierLoginPage';
 import { WaiterDashboardPage } from '../pages/staff/WaiterDashboardPage';
 import { KitchenDashboardPage } from '../pages/staff/KitchenDashboardPage';
 import { CashierDashboardPage } from '../pages/staff/CashierDashboardPage';
@@ -115,13 +118,13 @@ export const AppRoutes: React.FC = () => {
         <Route path="/contact" element={<ContactPage />} />
       </Route>
 
-      {/* Customer Authentication Routes (Clean Standalone Pages, No Navbar/Footer) */}
+      {/* Customer Authentication Routes (Isolated Clean Standalone Pages, No Public Navbar/Footer) */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-      {/* Admin Authentication Route (Dedicated AdminAuthLayout, Completely Isolated, No Public Navbar/Footer) */}
+      {/* Dedicated Separate Staff & Admin Login Pages (Role-Specific Branding, No Common Role Tabs) */}
       <Route
         path="/admin/login"
         element={
@@ -130,6 +133,12 @@ export const AppRoutes: React.FC = () => {
           </AdminAuthLayout>
         }
       />
+      <Route path="/waiter/login" element={<WaiterLoginPage />} />
+      <Route path="/chef/login" element={<ChefLoginPage />} />
+      <Route path="/cashier/login" element={<CashierLoginPage />} />
+      <Route path="/staff/login" element={<Navigate to="/waiter/login" replace />} />
+      <Route path="/kitchen/login" element={<Navigate to="/chef/login" replace />} />
+      <Route path="/pos/login" element={<Navigate to="/cashier/login" replace />} />
 
       {/* Admin Operations Portal Routes */}
       <Route
@@ -296,8 +305,7 @@ export const AppRoutes: React.FC = () => {
       />
 
       {/* Staff Authentication Route */}
-      <Route path="/staff/login" element={<StaffLoginPage />} />
-      <Route path="/staff" element={<Navigate to="/staff/login" replace />} />
+      <Route path="/staff" element={<Navigate to="/waiter/login" replace />} />
 
       {/* Staff Operational Terminals */}
       <Route

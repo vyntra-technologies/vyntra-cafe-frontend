@@ -61,7 +61,7 @@ import {
   FiPercent,
   FiFileText,
 } from 'react-icons/fi';
-import { StaffLayout } from '../../components/staff/StaffLayout';
+import { CashierLayout } from '../../components/staff/CashierLayout';
 import { posService, ShiftSummary, CreatePosOrderPayload } from '../../services/pos.service';
 import { menuService } from '../../services/menu.service';
 import { categoryService } from '../../services/category.service';
@@ -90,6 +90,20 @@ export const CashierDashboardPage: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeTabName, setActiveTabName] = useState<string>('pos');
+
+  const tabIndex = activeTabName === 'bills' ? 1 : 0;
+  const handleTabIndexChange = (index: number) => {
+    if (index === 0) setActiveTabName('pos');
+    else if (index === 1) setActiveTabName('bills');
+  };
+  const handleNavTabChange = (tabId: string) => {
+    if (tabId === 'shift') {
+      setActiveTabName('bills');
+    } else {
+      setActiveTabName(tabId);
+    }
+  };
 
   // Filter & Search
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -340,12 +354,12 @@ export const CashierDashboardPage: React.FC = () => {
   });
 
   return (
-    <StaffLayout
-      terminalName="Cashier POS Terminal"
-      terminalBadge="Point of Sale & Billing"
-      badgeColor="green"
+    <CashierLayout
+      activeTab={activeTabName}
+      onTabChange={handleNavTabChange}
       onRefresh={handleRefresh}
       isRefreshing={refreshing}
+      unpaidBillsCount={pendingOrders.length}
     >
       {/* Shift Revenue Strip */}
       <SimpleGrid columns={{ base: 2, md: 5 }} spacing={4} mb={6}>
@@ -406,7 +420,7 @@ export const CashierDashboardPage: React.FC = () => {
       </SimpleGrid>
 
       {/* Main Terminal Tabs */}
-      <Tabs colorScheme="green" variant="enclosed">
+      <Tabs index={tabIndex} onChange={handleTabIndexChange} colorScheme="green" variant="enclosed">
         <TabList borderBottom="1px solid" borderColor={borderCol} mb={4}>
           <Tab fontWeight="bold" fontSize="sm">
             POS Register (New Ticket)
@@ -999,7 +1013,7 @@ export const CashierDashboardPage: React.FC = () => {
           </ModalFooter>
         </ModalContent>
       </Modal>
-    </StaffLayout>
+    </CashierLayout>
   );
 };
 

@@ -1,6 +1,7 @@
 export type UserRole =
   | 'Owner'
   | 'Admin'
+  | 'ADMIN'
   | 'Manager'
   | 'Cashier'
   | 'Kitchen Staff'

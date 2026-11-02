@@ -262,7 +262,7 @@ export const OrderHistoryPage: React.FC = () => {
                           <Text color={textColor}>Add-ons: {it.addOns.map(a => a.name).join(', ')}</Text>
                         )}
                       </Box>
-                      <Text fontWeight="700" color={headingColor}>${it.itemTotal.toFixed(2)}</Text>
+                      <Text fontWeight="700" color={headingColor}>₹{it.itemTotal.toFixed(2)}</Text>
                     </Flex>
                   ))}
                 </VStack>
@@ -272,22 +272,22 @@ export const OrderHistoryPage: React.FC = () => {
                 <VStack spacing={1.5} align="stretch" fontSize="xs">
                   <Flex justify="space-between">
                     <Text color={textColor}>Subtotal</Text>
-                    <Text fontWeight="600">${selectedOrder.subtotal?.toFixed(2)}</Text>
+                    <Text fontWeight="600">₹{selectedOrder.subtotal?.toFixed(2)}</Text>
                   </Flex>
                   {selectedOrder.discount ? (
                     <Flex justify="space-between" color="green.500">
                       <Text>Discount ({selectedOrder.discountCode || 'Promo'})</Text>
-                      <Text fontWeight="600">-${selectedOrder.discount.toFixed(2)}</Text>
+                      <Text fontWeight="600">-₹{selectedOrder.discount.toFixed(2)}</Text>
                     </Flex>
                   ) : null}
                   <Flex justify="space-between">
                     <Text color={textColor}>Taxes</Text>
-                    <Text fontWeight="600">${selectedOrder.taxAmount?.toFixed(2)}</Text>
+                    <Text fontWeight="600">₹{selectedOrder.taxAmount?.toFixed(2)}</Text>
                   </Flex>
                   <Divider borderColor={borderColor} my={1} />
                   <Flex justify="space-between" fontSize="sm">
                     <Text fontWeight="800" color={headingColor}>Grand Total</Text>
-                    <Text fontWeight="800" color={accentColor}>${selectedOrder.grandTotal.toFixed(2)}</Text>
+                    <Text fontWeight="800" color={accentColor}>₹{selectedOrder.grandTotal.toFixed(2)}</Text>
                   </Flex>
                 </VStack>
               </VStack>

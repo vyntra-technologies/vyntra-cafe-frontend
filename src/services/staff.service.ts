@@ -74,5 +74,12 @@ export const staffService = {
     });
     return response.data.data!;
   },
+
+  async resetPassword(id: string, newPassword: string): Promise<any> {
+    const response = await apiClient.post<ApiResponse<any>>(`/staff/${id}/reset-password`, {
+      newPassword,
+    });
+    return response.data;
+  },
 };
 

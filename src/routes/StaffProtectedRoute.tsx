@@ -100,9 +100,15 @@ export const StaffProtectedRoute: React.FC<StaffProtectedRouteProps> = ({
     );
   }
 
-  // If unauthenticated, redirect to dedicated staff login
+  // If unauthenticated, redirect to dedicated role login page
   if (!isAuthenticated) {
-    return <Navigate to="/staff/login" state={{ from: location }} replace />;
+    let loginTarget = '/waiter/login';
+    if (location.pathname.startsWith('/chef') || location.pathname.startsWith('/kitchen')) {
+      loginTarget = '/chef/login';
+    } else if (location.pathname.startsWith('/cashier') || location.pathname.startsWith('/pos')) {
+      loginTarget = '/cashier/login';
+    }
+    return <Navigate to={loginTarget} state={{ from: location }} replace />;
   }
 
   const userRole = user?.role || 'Customer';
@@ -153,7 +159,7 @@ export const StaffProtectedRoute: React.FC<StaffProtectedRouteProps> = ({
           <VStack spacing={3}>
             <Button
               as={RouterLink}
-              to="/staff/login"
+              to={location.pathname.startsWith('/chef') ? '/chef/login' : location.pathname.startsWith('/cashier') ? '/cashier/login' : '/waiter/login'}
               w="full"
               bg={goldAccent}
               color="black"

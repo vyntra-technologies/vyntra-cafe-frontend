@@ -415,7 +415,7 @@ export const Navbar: React.FC = () => {
                       <>
                         <MenuItem
                           as={RouterLink}
-                          to="/staff/login"
+                          to="/waiter/dashboard"
                           icon={<FiBriefcase />}
                           borderRadius="lg"
                           fontSize="xs"
@@ -691,7 +691,7 @@ export const Navbar: React.FC = () => {
                       <VStack spacing={1.5} align="stretch">
                         <Flex
                           as={RouterLink}
-                          to="/staff/login"
+                          to="/waiter/dashboard"
                           onClick={onClose}
                           align="center"
                           justify="space-between"

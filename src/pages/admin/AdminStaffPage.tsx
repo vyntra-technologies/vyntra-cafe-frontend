@@ -5,8 +5,11 @@ import {
   Heading,
   Text,
   HStack,
+  VStack,
   Button,
   Input,
+  InputGroup,
+  InputRightElement,
   Select,
   Table,
   Thead,
@@ -28,6 +31,7 @@ import {
   useToast,
   FormControl,
   FormLabel,
+  FormErrorMessage,
   Spinner,
   Tabs,
   TabList,
@@ -51,10 +55,45 @@ import {
   FiSlash,
   FiRefreshCw,
   FiClock,
+  FiKey,
+  FiEye,
+  FiEyeOff,
 } from 'react-icons/fi';
 import { AdminLayout } from '../../components/admin/AdminLayout';
 import { staffService, CreateStaffPayload } from '../../services/staff.service';
 import { IStaff, UserRole, StaffAccountStatus } from '../../types';
+
+const initialStaffFormData: CreateStaffPayload = {
+  name: '',
+  email: '',
+  password: '',
+  phone: '',
+  role: 'WAITER',
+  position: 'Floor Waiter',
+  department: 'Service',
+  salaryType: 'monthly',
+  monthlySalary: 25000,
+};
+
+interface PasswordRequirements {
+  minLength: boolean;
+  hasUpper: boolean;
+  hasLower: boolean;
+  hasNumber: boolean;
+}
+
+const checkPasswordRequirements = (password: string): PasswordRequirements => ({
+  minLength: password.length >= 8,
+  hasUpper: /[A-Z]/.test(password),
+  hasLower: /[a-z]/.test(password),
+  hasNumber: /[0-9]/.test(password),
+});
+
+const isPasswordCompliant = (reqs: PasswordRequirements): boolean =>
+  reqs.minLength && reqs.hasUpper && reqs.hasLower && reqs.hasNumber;
+
+const isValidEmail = (email: string): boolean =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
 export const AdminStaffPage: React.FC = () => {
   const [staffList, setStaffList] = useState<IStaff[]>([]);
@@ -67,23 +106,34 @@ export const AdminStaffPage: React.FC = () => {
   const { isOpen: isAddOpen, onOpen: onAddOpen, onClose: onAddClose } = useDisclosure();
   const { isOpen: isRejectOpen, onOpen: onRejectOpen, onClose: onRejectClose } = useDisclosure();
   const { isOpen: isRoleOpen, onOpen: onRoleOpen, onClose: onRoleClose } = useDisclosure();
+  const { isOpen: isResetOpen, onOpen: onResetOpen, onClose: onResetClose } = useDisclosure();
 
   const [selectedStaff, setSelectedStaff] = useState<IStaff | null>(null);
   const [rejectionReason, setRejectionReason] = useState<string>('');
   const [targetRole, setTargetRole] = useState<UserRole>('WAITER');
+  const [newStaffPassword, setNewStaffPassword] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [showResetPassword, setShowResetPassword] = useState<boolean>(false);
 
   // New Staff Form State
-  const [formData, setFormData] = useState<CreateStaffPayload>({
-    name: '',
-    email: '',
-    password: '',
-    phone: '',
-    role: 'WAITER',
-    position: 'Floor Waiter',
-    department: 'Service',
-    salaryType: 'monthly',
-    monthlySalary: 25000,
-  });
+  const [formData, setFormData] = useState<CreateStaffPayload>(initialStaffFormData);
+
+  // Real-time validations
+  const createPwdReqs = checkPasswordRequirements(formData.password || '');
+  const isCreatePwdValid = isPasswordCompliant(createPwdReqs);
+  const isNameValid = (formData.name || '').trim().length >= 2;
+  const isEmailFormatValid = isValidEmail(formData.email || '');
+  const isPositionValid = (formData.position || '').trim().length >= 2;
+
+  const isCreateFormValid =
+    isNameValid &&
+    isEmailFormatValid &&
+    isCreatePwdValid &&
+    isPositionValid &&
+    !isSubmitting;
+
+  const resetPwdReqs = checkPasswordRequirements(newStaffPassword || '');
+  const isResetPwdValid = isPasswordCompliant(resetPwdReqs);
 
   const toast = useToast();
 
@@ -184,25 +234,92 @@ export const AdminStaffPage: React.FC = () => {
     }
   };
 
+  const handleResetPassword = async () => {
+    if (!selectedStaff || isSubmitting) return;
+
+    if (!isResetPwdValid) {
+      toast({
+        title: 'Password Insecure',
+        description: 'New password must be at least 8 characters long and contain uppercase, lowercase, and a number.',
+        status: 'warning',
+        duration: 3500,
+        isClosable: true,
+      });
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await staffService.resetPassword(selectedStaff._id, newStaffPassword);
+      toast({
+        title: 'Password Reset Successfully',
+        description: `New password assigned to ${getUserDetails(selectedStaff).name}.`,
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+      onResetClose();
+      setNewStaffPassword('');
+      setShowResetPassword(false);
+    } catch (err: any) {
+      const resp = err?.response?.data;
+      let errMsg = resp?.message || 'Could not reset password';
+      if (Array.isArray(resp?.errors) && resp.errors.length > 0) {
+        errMsg = resp.errors.map((e: any) => e.message).join(' • ');
+      }
+      toast({
+        title: 'Password Reset Failed',
+        description: errMsg,
+        status: 'error',
+        duration: 4000,
+        isClosable: true,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleCreateStaff = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.email || !formData.password) {
-      toast({ title: 'Please provide all required fields', status: 'warning', duration: 2500 });
+    if (isSubmitting) return;
+
+    if (!isCreateFormValid) {
+      toast({
+        title: 'Form Incomplete or Invalid',
+        description: 'Please satisfy all password rules and complete required fields before submitting.',
+        status: 'warning',
+        duration: 3500,
+        isClosable: true,
+      });
       return;
     }
 
     try {
       setIsSubmitting(true);
       await staffService.create(formData);
-      toast({ title: 'Staff account created successfully', status: 'success', duration: 2500 });
+      toast({
+        title: 'Staff Onboarded Successfully',
+        description: `${formData.name} was successfully enrolled as ${formData.role}.`,
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+      setFormData(initialStaffFormData);
+      setShowPassword(false);
       onAddClose();
       fetchStaffData();
     } catch (err: any) {
+      const resp = err?.response?.data;
+      let errMsg = resp?.message || 'Error creating staff record';
+      if (Array.isArray(resp?.errors) && resp.errors.length > 0) {
+        errMsg = resp.errors.map((e: any) => e.message || `${e.field} is invalid`).join(' • ');
+      }
       toast({
-        title: 'Staff Creation Failed',
-        description: err?.response?.data?.message || 'Error creating staff record',
+        title: 'Staff Onboarding Failed',
+        description: errMsg,
         status: 'error',
-        duration: 3000,
+        duration: 5000,
+        isClosable: true,
       });
     } finally {
       setIsSubmitting(false);
@@ -403,6 +520,19 @@ export const AdminStaffPage: React.FC = () => {
                                   >
                                     Assign Role
                                   </MenuItem>
+                                  <MenuItem
+                                    icon={<FiKey />}
+                                    fontSize="12px"
+                                    bg="transparent"
+                                    _hover={{ bg: innerCardBg, color: goldAccent }}
+                                    onClick={() => {
+                                      setSelectedStaff(staff);
+                                      setNewStaffPassword('');
+                                      onResetOpen();
+                                    }}
+                                  >
+                                    Reset Password
+                                  </MenuItem>
                                   {staff.status === 'suspended' ? (
                                     <MenuItem
                                       icon={<FiCheckCircle />}
@@ -522,16 +652,30 @@ export const AdminStaffPage: React.FC = () => {
         </Tabs>
 
         {/* Add Staff Modal */}
-        <Modal isOpen={isAddOpen} onClose={onAddClose} size="xl" isCentered>
+        <Modal
+          isOpen={isAddOpen}
+          onClose={() => {
+            if (!isSubmitting) {
+              setFormData(initialStaffFormData);
+              setShowPassword(false);
+              onAddClose();
+            }
+          }}
+          size="xl"
+          isCentered
+        >
           <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(5px)" />
           <ModalContent as="form" onSubmit={handleCreateStaff} bg={cardBg} borderColor={borderColor} border="1px solid" color={textColor}>
             <ModalHeader borderBottom="1px solid" borderColor={borderColor}>
-              Onboard Staff Member
+              <HStack spacing={2}>
+                <FiUserCheck color={goldAccent} />
+                <Text>Onboard Staff Personnel</Text>
+              </HStack>
             </ModalHeader>
-            <ModalCloseButton color={mutedColor} />
+            <ModalCloseButton color={mutedColor} isDisabled={isSubmitting} />
             <ModalBody py={5}>
               <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} mb={4}>
-                <FormControl isRequired>
+                <FormControl isRequired isInvalid={formData.name.length > 0 && !isNameValid}>
                   <FormLabel fontSize="xs" color={mutedColor}>Full Name</FormLabel>
                   <Input
                     placeholder="e.g. Rahul Sharma"
@@ -539,10 +683,14 @@ export const AdminStaffPage: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     bg={innerCardBg}
                     borderColor={borderColor}
+                    _focus={{ borderColor: goldAccent }}
                   />
+                  {formData.name.length > 0 && !isNameValid && (
+                    <FormErrorMessage fontSize="2xs">Name must be at least 2 characters</FormErrorMessage>
+                  )}
                 </FormControl>
 
-                <FormControl isRequired>
+                <FormControl isRequired isInvalid={formData.email.length > 0 && !isEmailFormatValid}>
                   <FormLabel fontSize="xs" color={mutedColor}>Official Email</FormLabel>
                   <Input
                     type="email"
@@ -551,21 +699,89 @@ export const AdminStaffPage: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     bg={innerCardBg}
                     borderColor={borderColor}
+                    _focus={{ borderColor: goldAccent }}
                   />
+                  {formData.email.length > 0 && !isEmailFormatValid && (
+                    <FormErrorMessage fontSize="2xs">Valid email address required</FormErrorMessage>
+                  )}
                 </FormControl>
               </SimpleGrid>
 
               <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} mb={4}>
-                <FormControl isRequired>
+                <FormControl isRequired isInvalid={Boolean(formData.password && !isCreatePwdValid)}>
                   <FormLabel fontSize="xs" color={mutedColor}>Temporary Password</FormLabel>
-                  <Input
-                    type="password"
-                    placeholder="Minimum 6 characters"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  <InputGroup size="md">
+                    <Input
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="e.g. CafeStaff@2026"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      bg={innerCardBg}
+                      borderColor={borderColor}
+                      _focus={{ borderColor: goldAccent }}
+                      pr="4.5rem"
+                    />
+                    <InputRightElement width="3.5rem">
+                      <IconButton
+                        h="1.75rem"
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => setShowPassword(!showPassword)}
+                        icon={showPassword ? <FiEyeOff /> : <FiEye />}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        color={mutedColor}
+                        _hover={{ color: textColor }}
+                      />
+                    </InputRightElement>
+                  </InputGroup>
+
+                  {/* Real-time Password Security Checklist */}
+                  <Box
+                    mt={2}
+                    p={2.5}
                     bg={innerCardBg}
+                    borderRadius="md"
+                    border="1px solid"
                     borderColor={borderColor}
-                  />
+                  >
+                    <Text fontSize="2xs" fontWeight="700" color={mutedColor} mb={1.5} textTransform="uppercase" letterSpacing="0.05em">
+                      Password Requirements:
+                    </Text>
+                    <VStack align="stretch" spacing={1}>
+                      <HStack
+                        spacing={1.5}
+                        fontSize="2xs"
+                        color={createPwdReqs.minLength ? 'green.400' : (formData.password ? 'red.400' : mutedColor)}
+                      >
+                        {createPwdReqs.minLength ? <FiCheckCircle /> : <FiXCircle />}
+                        <Text>Minimum 8 characters</Text>
+                      </HStack>
+                      <HStack
+                        spacing={1.5}
+                        fontSize="2xs"
+                        color={createPwdReqs.hasUpper ? 'green.400' : (formData.password ? 'red.400' : mutedColor)}
+                      >
+                        {createPwdReqs.hasUpper ? <FiCheckCircle /> : <FiXCircle />}
+                        <Text>At least one uppercase letter (A-Z)</Text>
+                      </HStack>
+                      <HStack
+                        spacing={1.5}
+                        fontSize="2xs"
+                        color={createPwdReqs.hasLower ? 'green.400' : (formData.password ? 'red.400' : mutedColor)}
+                      >
+                        {createPwdReqs.hasLower ? <FiCheckCircle /> : <FiXCircle />}
+                        <Text>At least one lowercase letter (a-z)</Text>
+                      </HStack>
+                      <HStack
+                        spacing={1.5}
+                        fontSize="2xs"
+                        color={createPwdReqs.hasNumber ? 'green.400' : (formData.password ? 'red.400' : mutedColor)}
+                      >
+                        {createPwdReqs.hasNumber ? <FiCheckCircle /> : <FiXCircle />}
+                        <Text>At least one number (0-9)</Text>
+                      </HStack>
+                    </VStack>
+                  </Box>
                 </FormControl>
 
                 <FormControl>
@@ -576,7 +792,11 @@ export const AdminStaffPage: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     bg={innerCardBg}
                     borderColor={borderColor}
+                    _focus={{ borderColor: goldAccent }}
                   />
+                  <Text fontSize="2xs" color={mutedColor} mt={1}>
+                    Optional direct phone for contact
+                  </Text>
                 </FormControl>
               </SimpleGrid>
 
@@ -585,25 +805,57 @@ export const AdminStaffPage: React.FC = () => {
                   <FormLabel fontSize="xs" color={mutedColor}>Role</FormLabel>
                   <Select
                     value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
+                    onChange={(e) => {
+                      const newRole = e.target.value as UserRole;
+                      let defaultPos = formData.position;
+                      let defaultDept = formData.department;
+                      if (newRole === 'WAITER') {
+                        defaultPos = 'Floor Waiter';
+                        defaultDept = 'Service';
+                      } else if (newRole === 'CHEF') {
+                        defaultPos = 'Kitchen Chef';
+                        defaultDept = 'Kitchen';
+                      } else if (newRole === 'CASHIER') {
+                        defaultPos = 'POS Cashier';
+                        defaultDept = 'Front Desk';
+                      } else if (newRole === 'MANAGER') {
+                        defaultPos = 'Shift Manager';
+                        defaultDept = 'Operations';
+                      } else if (newRole === 'ADMIN') {
+                        defaultPos = 'Administrator';
+                        defaultDept = 'Administration';
+                      }
+                      setFormData({
+                        ...formData,
+                        role: newRole,
+                        position: defaultPos,
+                        department: defaultDept,
+                      });
+                    }}
                     bg={innerCardBg}
                     borderColor={borderColor}
+                    _focus={{ borderColor: goldAccent }}
                   >
                     <option value="WAITER">WAITER</option>
                     <option value="CHEF">CHEF</option>
                     <option value="CASHIER">CASHIER</option>
                     <option value="MANAGER">MANAGER</option>
+                    <option value="ADMIN">ADMIN</option>
                   </Select>
                 </FormControl>
 
-                <FormControl isRequired>
+                <FormControl isRequired isInvalid={formData.position.length > 0 && !isPositionValid}>
                   <FormLabel fontSize="xs" color={mutedColor}>Position Title</FormLabel>
                   <Input
                     value={formData.position}
                     onChange={(e) => setFormData({ ...formData, position: e.target.value })}
                     bg={innerCardBg}
                     borderColor={borderColor}
+                    _focus={{ borderColor: goldAccent }}
                   />
+                  {formData.position.length > 0 && !isPositionValid && (
+                    <FormErrorMessage fontSize="2xs">Position title is required</FormErrorMessage>
+                  )}
                 </FormControl>
 
                 <FormControl>
@@ -613,6 +865,7 @@ export const AdminStaffPage: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                     bg={innerCardBg}
                     borderColor={borderColor}
+                    _focus={{ borderColor: goldAccent }}
                   />
                 </FormControl>
               </SimpleGrid>
@@ -644,7 +897,17 @@ export const AdminStaffPage: React.FC = () => {
               </SimpleGrid>
             </ModalBody>
             <ModalFooter borderTop="1px solid" borderColor={borderColor}>
-              <Button variant="ghost" size="sm" mr={3} onClick={onAddClose}>
+              <Button
+                variant="ghost"
+                size="sm"
+                mr={3}
+                isDisabled={isSubmitting}
+                onClick={() => {
+                  setFormData(initialStaffFormData);
+                  setShowPassword(false);
+                  onAddClose();
+                }}
+              >
                 Cancel
               </Button>
               <Button
@@ -654,6 +917,9 @@ export const AdminStaffPage: React.FC = () => {
                 size="sm"
                 fontWeight="600"
                 isLoading={isSubmitting}
+                isDisabled={!isCreateFormValid}
+                _disabled={{ opacity: 0.45, cursor: 'not-allowed' }}
+                _hover={!isCreateFormValid ? {} : { filter: 'brightness(1.1)' }}
               >
                 Onboard Personnel
               </Button>
@@ -699,6 +965,146 @@ export const AdminStaffPage: React.FC = () => {
                   onClick={handleUpdateRole}
                 >
                   Save Role
+                </Button>
+              </ModalFooter>
+            </ModalContent>
+          </Modal>
+        )}
+
+        {/* Reset Staff Password Modal */}
+        {selectedStaff && (
+          <Modal
+            isOpen={isResetOpen}
+            onClose={() => {
+              if (!isSubmitting) {
+                setNewStaffPassword('');
+                setShowResetPassword(false);
+                onResetClose();
+              }
+            }}
+            isCentered
+          >
+            <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(5px)" />
+            <ModalContent bg={cardBg} borderColor={borderColor} border="1px solid" color={textColor}>
+              <ModalHeader borderBottom="1px solid" borderColor={borderColor}>
+                <HStack spacing={2}>
+                  <FiKey color={goldAccent} />
+                  <Text>Reset Password &bull; {selectedStaff.employeeId}</Text>
+                </HStack>
+              </ModalHeader>
+              <ModalCloseButton color={mutedColor} isDisabled={isSubmitting} />
+              <ModalBody py={5}>
+                <VStack spacing={4} align="stretch">
+                  <Text fontSize="xs" color={mutedColor}>
+                    Assign a new secure temporary password for{' '}
+                    <Text as="span" fontWeight="bold" color={goldAccent}>
+                      {getUserDetails(selectedStaff).name}
+                    </Text>{' '}
+                    ({getUserDetails(selectedStaff).email}).
+                  </Text>
+                  <FormControl isRequired isInvalid={Boolean(newStaffPassword && !isResetPwdValid)}>
+                    <FormLabel fontSize="xs" color={mutedColor}>New Password</FormLabel>
+                    <InputGroup size="md">
+                      <Input
+                        type={showResetPassword ? 'text' : 'password'}
+                        placeholder="e.g. NewPass@2026"
+                        value={newStaffPassword}
+                        onChange={(e) => setNewStaffPassword(e.target.value)}
+                        bg={innerCardBg}
+                        borderColor={borderColor}
+                        _focus={{ borderColor: goldAccent }}
+                        pr="4.5rem"
+                      />
+                      <InputRightElement width="3.5rem">
+                        <IconButton
+                          h="1.75rem"
+                          size="xs"
+                          variant="ghost"
+                          onClick={() => setShowResetPassword(!showResetPassword)}
+                          icon={showResetPassword ? <FiEyeOff /> : <FiEye />}
+                          aria-label={showResetPassword ? 'Hide password' : 'Show password'}
+                          color={mutedColor}
+                          _hover={{ color: textColor }}
+                        />
+                      </InputRightElement>
+                    </InputGroup>
+
+                    {/* Requirements checklist for Reset Password */}
+                    <Box
+                      mt={2}
+                      p={2.5}
+                      bg={innerCardBg}
+                      borderRadius="md"
+                      border="1px solid"
+                      borderColor={borderColor}
+                    >
+                      <Text fontSize="2xs" fontWeight="700" color={mutedColor} mb={1.5} textTransform="uppercase" letterSpacing="0.05em">
+                        Password Requirements:
+                      </Text>
+                      <VStack align="stretch" spacing={1}>
+                        <HStack
+                          spacing={1.5}
+                          fontSize="2xs"
+                          color={resetPwdReqs.minLength ? 'green.400' : (newStaffPassword ? 'red.400' : mutedColor)}
+                        >
+                          {resetPwdReqs.minLength ? <FiCheckCircle /> : <FiXCircle />}
+                          <Text>Minimum 8 characters</Text>
+                        </HStack>
+                        <HStack
+                          spacing={1.5}
+                          fontSize="2xs"
+                          color={resetPwdReqs.hasUpper ? 'green.400' : (newStaffPassword ? 'red.400' : mutedColor)}
+                        >
+                          {resetPwdReqs.hasUpper ? <FiCheckCircle /> : <FiXCircle />}
+                          <Text>At least one uppercase letter (A-Z)</Text>
+                        </HStack>
+                        <HStack
+                          spacing={1.5}
+                          fontSize="2xs"
+                          color={resetPwdReqs.hasLower ? 'green.400' : (newStaffPassword ? 'red.400' : mutedColor)}
+                        >
+                          {resetPwdReqs.hasLower ? <FiCheckCircle /> : <FiXCircle />}
+                          <Text>At least one lowercase letter (a-z)</Text>
+                        </HStack>
+                        <HStack
+                          spacing={1.5}
+                          fontSize="2xs"
+                          color={resetPwdReqs.hasNumber ? 'green.400' : (newStaffPassword ? 'red.400' : mutedColor)}
+                        >
+                          {resetPwdReqs.hasNumber ? <FiCheckCircle /> : <FiXCircle />}
+                          <Text>At least one number (0-9)</Text>
+                        </HStack>
+                      </VStack>
+                    </Box>
+                  </FormControl>
+                </VStack>
+              </ModalBody>
+              <ModalFooter borderTop="1px solid" borderColor={borderColor}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  mr={3}
+                  isDisabled={isSubmitting}
+                  onClick={() => {
+                    setNewStaffPassword('');
+                    setShowResetPassword(false);
+                    onResetClose();
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  bg={goldAccent}
+                  color="black"
+                  size="sm"
+                  fontWeight="600"
+                  isLoading={isSubmitting}
+                  isDisabled={!isResetPwdValid || isSubmitting}
+                  _disabled={{ opacity: 0.45, cursor: 'not-allowed' }}
+                  _hover={!isResetPwdValid ? {} : { filter: 'brightness(1.1)' }}
+                  onClick={handleResetPassword}
+                >
+                  Update Password
                 </Button>
               </ModalFooter>
             </ModalContent>

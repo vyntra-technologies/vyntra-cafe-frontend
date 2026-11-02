@@ -34,7 +34,7 @@ import {
   FiRefreshCw,
   FiList,
 } from 'react-icons/fi';
-import { StaffLayout } from '../../components/staff/StaffLayout';
+import { ChefLayout } from '../../components/staff/ChefLayout';
 import { kitchenService, KitchenDashboardStats } from '../../services/kitchen.service';
 import { socketService } from '../../services/socket.service';
 import { IOrder } from '../../types';
@@ -47,6 +47,20 @@ export const KitchenDashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const [activeTabName, setActiveTabName] = useState<string>('active');
+
+  const tabIndex = activeTabName === 'history' ? 1 : 0;
+  const handleTabIndexChange = (index: number) => {
+    if (index === 0) setActiveTabName('active');
+    else if (index === 1) {
+      setActiveTabName('history');
+      fetchHistory();
+    }
+  };
+  const handleNavTabChange = (tabId: string) => {
+    setActiveTabName(tabId);
+    if (tabId === 'history') fetchHistory();
+  };
 
   // Time tracker for live elapsed timers
   const [, setTick] = useState(0);
@@ -160,12 +174,13 @@ export const KitchenDashboardPage: React.FC = () => {
   const readyOrders = orders.filter((o) => o.fulfillmentStatus === 'ready_for_pickup');
 
   return (
-    <StaffLayout
-      terminalName="Kitchen Display System (KDS)"
-      terminalBadge="Culinary Ops"
-      badgeColor="orange"
+    <ChefLayout
+      activeTab={activeTabName}
+      onTabChange={handleNavTabChange}
       onRefresh={handleRefresh}
       isRefreshing={refreshing}
+      activeTicketCount={orders.length}
+      completedTicketCount={historyOrders.length}
     >
       {/* Kitchen Operations Stats Strip */}
       <SimpleGrid columns={{ base: 2, md: 5 }} spacing={4} mb={6}>
@@ -226,7 +241,7 @@ export const KitchenDashboardPage: React.FC = () => {
       </SimpleGrid>
 
       {/* Tabs: Live Kitchen Kanban vs Finished History */}
-      <Tabs colorScheme="orange" variant="enclosed">
+      <Tabs index={tabIndex} onChange={handleTabIndexChange} colorScheme="orange" variant="enclosed">
         <TabList borderBottom="1px solid" borderColor={borderCol} mb={4}>
           <Tab fontWeight="bold" fontSize="sm">
             Live Cooking Stations ({orders.length})
@@ -560,7 +575,7 @@ export const KitchenDashboardPage: React.FC = () => {
           </TabPanel>
         </TabPanels>
       </Tabs>
-    </StaffLayout>
+    </ChefLayout>
   );
 };
 

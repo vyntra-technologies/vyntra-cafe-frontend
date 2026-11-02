@@ -304,6 +304,9 @@ export const Footer: React.FC = () => {
             <Text as={RouterLink} to="/login" _hover={{ color: goldAccent }}>
               Guest Portal
             </Text>
+            <Text as={RouterLink} to="/login?role=admin" _hover={{ color: goldAccent }}>
+              Staff & Management
+            </Text>
           </HStack>
         </Flex>
       </Container>
