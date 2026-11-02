@@ -68,7 +68,7 @@ import { categoryService } from '../../services/category.service';
 import { tableService } from '../../services/table.service';
 import { socketService } from '../../services/socket.service';
 import { IMenuItem, ICategory, ITable, IOrder, PaymentMethod } from '../../types';
-import toast from 'react-hot-toast';
+import toast from '../../utils/toast';
 
 interface PosCartItem {
   menuItemId: string;

@@ -45,7 +45,7 @@ import { kitchenService } from '../../services/kitchen.service';
 import { tableService } from '../../services/table.service';
 import { socketService } from '../../services/socket.service';
 import { ITable, IOrder } from '../../types';
-import toast from 'react-hot-toast';
+import toast from '../../utils/toast';
 
 export const ManagerDashboardPage: React.FC = () => {
   const [shift, setShift] = useState<ShiftSummary | null>(null);

@@ -64,7 +64,7 @@ import { waiterService } from '../../services/waiter.service';
 import { menuService } from '../../services/menu.service';
 import { socketService } from '../../services/socket.service';
 import { ITable, IOrder, IMenuItem, TableStatus } from '../../types';
-import toast from 'react-hot-toast';
+import toast from '../../utils/toast';
 
 interface OrderItemDraft {
   menuItemId: string;

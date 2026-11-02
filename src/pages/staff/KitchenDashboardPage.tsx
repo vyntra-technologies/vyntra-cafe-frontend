@@ -38,7 +38,7 @@ import { StaffLayout } from '../../components/staff/StaffLayout';
 import { kitchenService, KitchenDashboardStats } from '../../services/kitchen.service';
 import { socketService } from '../../services/socket.service';
 import { IOrder } from '../../types';
-import toast from 'react-hot-toast';
+import toast from '../../utils/toast';
 
 export const KitchenDashboardPage: React.FC = () => {
   const [orders, setOrders] = useState<IOrder[]>([]);

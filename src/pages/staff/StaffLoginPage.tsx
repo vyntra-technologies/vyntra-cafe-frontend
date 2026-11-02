@@ -36,7 +36,7 @@ import {
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { ThemeToggle } from '../../components/common/ThemeToggle';
-import toast from 'react-hot-toast';
+import toast from '../../utils/toast';
 
 export const StaffLoginPage: React.FC = () => {
   const [email, setEmail] = useState('');

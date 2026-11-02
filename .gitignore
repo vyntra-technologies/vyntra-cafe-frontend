@@ -1,85 +1,34 @@
 # Dependencies
 node_modules/
-**/node_modules/
+/.pnp
+.pnp.js
 
-# Environment variables
-.env
-.env.*
-!.env.example
-!.env.sample
-
-# Build files
+# Production build outputs
 dist/
+dist-ssr/
 build/
-out/
-coverage/
+*.local
 
 # Logs
-logs/
+logs
 *.log
 npm-debug.log*
 yarn-debug.log*
+yarn-error.log*
 pnpm-debug.log*
 
-# Cache
-.cache/
-.vite/
-.eslintcache/
-.parcel-cache/
+# Environment files
+.env.local
+.env.*.local
 
-# TypeScript
-*.tsbuildinfo
-
-# OS files
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# IDE
+# Editor & OS artifacts
 .vscode/*
 !.vscode/extensions.json
 .idea/
+.DS_Store
+Thumbs.db
 *.swp
 *.swo
 
-# Temporary files
-tmp/
-temp/
-*.tmp
-*.bak
-
-# Testing
-.nyc_output/
-playwright-report/
-test-results/
-
-# Uploads (ignore uploaded files, keep folder)
-server/uploads/*
-!server/uploads/.gitkeep
-
-# Database local files
-*.sqlite
-*.sqlite3
-*.db
-
-# Secrets and certificates
-*.pem
-*.key
-*.crt
-*.p12
-
-# Deployment
-.vercel/
-.netlify/
-.turbo/
-
-# Docker
-.docker/
-
-# Python (if applicable)
-__pycache__/
-*.pyc
-.venv/
-
-# Generated files
-*.map
+# Vite cache
+.vite/
