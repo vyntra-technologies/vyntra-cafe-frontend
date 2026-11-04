@@ -46,6 +46,7 @@ import {
 } from 'react-icons/fi';
 import { AdminLayout } from '../../components/admin/AdminLayout';
 import { categoryService } from '../../services/category.service';
+import { ImageUpload } from '../../components/upload/ImageUpload';
 import { ICategory } from '../../types';
 
 export const AdminCategoriesPage: React.FC = () => {
@@ -65,6 +66,7 @@ export const AdminCategoriesPage: React.FC = () => {
     name: '',
     description: '',
     image: '',
+    imagePublicId: '',
     displayOrder: 0,
     isActive: true,
   });
@@ -107,6 +109,7 @@ export const AdminCategoriesPage: React.FC = () => {
       name: '',
       description: '',
       image: '',
+      imagePublicId: '',
       displayOrder: categories.length + 1,
       isActive: true,
     });
@@ -119,6 +122,7 @@ export const AdminCategoriesPage: React.FC = () => {
       name: cat.name,
       description: cat.description || '',
       image: cat.image || '',
+      imagePublicId: (cat as any).imagePublicId || '',
       displayOrder: cat.displayOrder || 1,
       isActive: cat.isActive,
     });
@@ -210,7 +214,7 @@ export const AdminCategoriesPage: React.FC = () => {
               onClick={fetchCategories}
               _hover={{ borderColor: goldAccent, color: goldAccent }}
             >
-              Sync
+              Refresh
             </Button>
             <Button
               leftIcon={<FiPlus />}
@@ -226,7 +230,7 @@ export const AdminCategoriesPage: React.FC = () => {
           </HStack>
         </Flex>
 
-        {/* Categories Table */}
+        {/* Categories Data Table */}
         <Box
           borderRadius="xl"
           bg={cardBg}
@@ -237,8 +241,8 @@ export const AdminCategoriesPage: React.FC = () => {
           <Table size="md" variant="simple">
             <Thead bg={tableHeaderBg}>
               <Tr>
-                <Th color={mutedColor} borderColor={borderColor} w="80px">Order</Th>
-                <Th color={mutedColor} borderColor={borderColor}>Category Name</Th>
+                <Th color={mutedColor} borderColor={borderColor} w="60px">Order</Th>
+                <Th color={mutedColor} borderColor={borderColor}>Category</Th>
                 <Th color={mutedColor} borderColor={borderColor}>Slug</Th>
                 <Th color={mutedColor} borderColor={borderColor}>Description</Th>
                 <Th color={mutedColor} borderColor={borderColor}>Status</Th>
@@ -348,13 +352,15 @@ export const AdminCategoriesPage: React.FC = () => {
               </FormControl>
 
               <FormControl mb={4}>
-                <FormLabel fontSize="xs" color={mutedColor}>Cover Image URL</FormLabel>
-                <Input
-                  placeholder="https://images.unsplash.com/..."
+                <FormLabel fontSize="xs" color={mutedColor}>Cover Image (Cloudinary)</FormLabel>
+                <ImageUpload
                   value={formData.image}
-                  onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                  bg={innerCardBg}
-                  borderColor={borderColor}
+                  publicId={formData.imagePublicId}
+                  onChange={(url, publicId) =>
+                    setFormData({ ...formData, image: url, imagePublicId: publicId || '' })
+                  }
+                  folder="categories"
+                  label="Upload Category Image"
                 />
               </FormControl>
 
@@ -409,7 +415,7 @@ export const AdminCategoriesPage: React.FC = () => {
                 Delete Category
               </AlertDialogHeader>
               <AlertDialogBody>
-                Are you sure you want to delete <Text as="span" fontWeight="bold" color={goldAccent}>"{categoryToDelete?.name}"</Text>? If there are menu items tied to this category, deletion will be blocked by backend integrity rules.
+                Are you sure you want to delete <Text as="span" fontWeight="bold" color={goldAccent}>"{categoryToDelete?.name}"</Text>? Food items within this category should first be reassigned.
               </AlertDialogBody>
               <AlertDialogFooter>
                 <Button ref={cancelDeleteRef} onClick={onDeleteClose} size="sm" variant="ghost">
@@ -426,4 +432,4 @@ export const AdminCategoriesPage: React.FC = () => {
     </AdminLayout>
   );
 };
-
+export default AdminCategoriesPage;

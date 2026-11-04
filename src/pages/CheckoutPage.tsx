@@ -108,23 +108,41 @@ export const CheckoutPage: React.FC = () => {
   const paymentOptions = paymentService.getAvailablePaymentMethods(orderType);
 
   const handleSubmitOrder = async () => {
+    if (isSubmitting) return;
+
     if (items.length === 0) {
       toast({
         title: 'Empty Cart',
         description: 'Please add items to your cart before proceeding to checkout.',
         status: 'error',
+        duration: 3500,
+        isClosable: true,
       });
       navigate('/menu');
       return;
     }
 
-    if (orderType === 'dine-in' && !selectedTableId) {
-      toast({
-        title: 'Table Required',
-        description: 'Please select an available dining table for your dine-in experience.',
-        status: 'warning',
-      });
-      return;
+    if (orderType === 'dine-in') {
+      if (!selectedTableId || !selectedTableId.trim()) {
+        toast({
+          title: 'Table Required',
+          description: 'Please select an available dining table for your dine-in experience.',
+          status: 'warning',
+          duration: 3500,
+          isClosable: true,
+        });
+        return;
+      }
+      if (selectedTable && selectedTable.status !== 'available') {
+        toast({
+          title: 'Table Unavailable',
+          description: `Table ${selectedTable.tableNumber} is currently ${selectedTable.status}. Please choose an available table.`,
+          status: 'warning',
+          duration: 3500,
+          isClosable: true,
+        });
+        return;
+      }
     }
 
     if (!customerName.trim() || !customerPhone.trim()) {
@@ -132,6 +150,8 @@ export const CheckoutPage: React.FC = () => {
         title: 'Contact Details Required',
         description: 'Please provide customer name and phone number.',
         status: 'warning',
+        duration: 3500,
+        isClosable: true,
       });
       return;
     }
@@ -146,13 +166,24 @@ export const CheckoutPage: React.FC = () => {
         paymentMethod,
         discountCode: appliedCoupon?.code,
         notes: notes.trim() || undefined,
-        items: items.map((cartItem) => ({
-          menuItemId: cartItem.menuItem._id,
-          quantity: cartItem.quantity,
-          variantName: cartItem.selectedVariant?.name,
-          addOns: cartItem.selectedAddOns.map((a) => a.name),
-          notes: cartItem.notes,
-        })),
+        items: items.map((cartItem) => {
+          const menuItemId =
+            cartItem.menuItem?._id ||
+            (cartItem.menuItem as any)?.id ||
+            (typeof cartItem.menuItem === 'string' ? cartItem.menuItem : '');
+
+          const addOns = (cartItem.selectedAddOns || []).map((a: any) =>
+            typeof a === 'string' ? a : a.name
+          );
+
+          return {
+            menuItemId,
+            quantity: cartItem.quantity,
+            variantName: cartItem.selectedVariant?.name || undefined,
+            addOns,
+            notes: cartItem.notes || undefined,
+          };
+        }),
       };
 
       const idempotencyKey = `ord_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -164,11 +195,21 @@ export const CheckoutPage: React.FC = () => {
         description: `Order ${createdOrder.orderNumber} is now being prepared.`,
         status: 'success',
         duration: 4000,
+        isClosable: true,
       });
 
       navigate(`/order-confirmation/${createdOrder._id}`);
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to place order. Please review your details and try again.';
+      let msg = 'Failed to place order. Please review your details and try again.';
+      const resData = err.response?.data;
+      if (resData?.errors && Array.isArray(resData.errors) && resData.errors.length > 0) {
+        msg = resData.errors.map((e: any) => e.message || `${e.field} is invalid`).join(' • ');
+      } else if (resData?.message) {
+        msg = resData.message;
+      } else if (err.message) {
+        msg = err.message;
+      }
+
       toast({
         title: 'Ordering Failed',
         description: msg,

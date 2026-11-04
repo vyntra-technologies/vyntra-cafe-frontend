@@ -21,17 +21,13 @@ import { RegisterPage } from '../pages/RegisterPage';
 import { ForgotPasswordPage } from '../pages/ForgotPasswordPage';
 import { ResetPasswordPage } from '../pages/ResetPasswordPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
+import { UnauthorizedPage } from '../pages/UnauthorizedPage';
 import { ProtectedRoute } from './ProtectedRoute';
-import { AdminProtectedRoute } from './AdminProtectedRoute';
+import { RoleProtectedRoute } from './RoleProtectedRoute';
+import { PublicOnlyRoute } from './PublicOnlyRoute';
 import { PublicLayout } from '../components/layout/PublicLayout';
 import { AdminAuthLayout } from '../components/layout/AdminAuthLayout';
-import {
-  StaffProtectedRoute,
-  WAITER_ROLES,
-  KITCHEN_ROLES,
-  CASHIER_ROLES,
-  MANAGEMENT_ROLES,
-} from './StaffProtectedRoute';
+import { ROLE_GROUPS } from '../utils/roleUtils';
 
 // Admin Pages
 import { AdminLoginPage } from '../pages/admin/AdminLoginPage';
@@ -58,10 +54,10 @@ import { AdminWasteManagementPage } from '../pages/admin/inventory/AdminWasteMan
 import { AdminInventoryReportsPage } from '../pages/admin/inventory/AdminInventoryReportsPage';
 
 // Staff Terminals & Dashboards
-import { StaffLoginPage } from '../pages/staff/StaffLoginPage';
 import { WaiterLoginPage } from '../pages/staff/WaiterLoginPage';
 import { ChefLoginPage } from '../pages/staff/ChefLoginPage';
 import { CashierLoginPage } from '../pages/staff/CashierLoginPage';
+import { ManagerLoginPage } from '../pages/staff/ManagerLoginPage';
 import { WaiterDashboardPage } from '../pages/staff/WaiterDashboardPage';
 import { KitchenDashboardPage } from '../pages/staff/KitchenDashboardPage';
 import { CashierDashboardPage } from '../pages/staff/CashierDashboardPage';
@@ -118,202 +114,252 @@ export const AppRoutes: React.FC = () => {
         <Route path="/contact" element={<ContactPage />} />
       </Route>
 
-      {/* Customer Authentication Routes (Isolated Clean Standalone Pages, No Public Navbar/Footer) */}
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      {/* Customer Authentication Routes (PublicOnlyRoute: if already signed in, redirects to role dashboard) */}
+      <Route
+        path="/login"
+        element={
+          <PublicOnlyRoute>
+            <LoginPage />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/register"
+        element={
+          <PublicOnlyRoute>
+            <RegisterPage />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/forgot-password"
+        element={
+          <PublicOnlyRoute>
+            <ForgotPasswordPage />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/reset-password"
+        element={
+          <PublicOnlyRoute>
+            <ResetPasswordPage />
+          </PublicOnlyRoute>
+        }
+      />
 
-      {/* Dedicated Separate Staff & Admin Login Pages (Role-Specific Branding, No Common Role Tabs) */}
+      {/* Dedicated Separate Staff & Admin Login Pages (Role-Specific Branding, PublicOnlyRoute protected) */}
       <Route
         path="/admin/login"
         element={
-          <AdminAuthLayout>
-            <AdminLoginPage />
-          </AdminAuthLayout>
+          <PublicOnlyRoute>
+            <AdminAuthLayout>
+              <AdminLoginPage />
+            </AdminAuthLayout>
+          </PublicOnlyRoute>
         }
       />
-      <Route path="/waiter/login" element={<WaiterLoginPage />} />
-      <Route path="/chef/login" element={<ChefLoginPage />} />
-      <Route path="/cashier/login" element={<CashierLoginPage />} />
+      <Route
+        path="/waiter/login"
+        element={
+          <PublicOnlyRoute>
+            <WaiterLoginPage />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/chef/login"
+        element={
+          <PublicOnlyRoute>
+            <ChefLoginPage />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/cashier/login"
+        element={
+          <PublicOnlyRoute>
+            <CashierLoginPage />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/manager/login"
+        element={
+          <PublicOnlyRoute>
+            <ManagerLoginPage />
+          </PublicOnlyRoute>
+        }
+      />
       <Route path="/staff/login" element={<Navigate to="/waiter/login" replace />} />
       <Route path="/kitchen/login" element={<Navigate to="/chef/login" replace />} />
       <Route path="/pos/login" element={<Navigate to="/cashier/login" replace />} />
 
-      {/* Admin Operations Portal Routes */}
+      {/* Admin Operations Portal Routes (Strict Role Protection: ADMIN / SUPER_ADMIN / OWNER) */}
       <Route
         path="/admin/dashboard"
         element={
-          <AdminProtectedRoute>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.ADMIN} loginPath="/admin/login">
             <AdminOverviewPage />
-          </AdminProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
-      <Route
-        path="/admin"
-        element={<Navigate to="/admin/dashboard" replace />}
-      />
-      <Route
-        path="/admin/overview"
-        element={<Navigate to="/admin/dashboard" replace />}
-      />
+      <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+      <Route path="/admin/overview" element={<Navigate to="/admin/dashboard" replace />} />
       <Route
         path="/admin/orders"
         element={
-          <AdminProtectedRoute>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.ADMIN} loginPath="/admin/login">
             <AdminOrdersPage />
-          </AdminProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route
         path="/admin/menu"
         element={
-          <AdminProtectedRoute>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.ADMIN} loginPath="/admin/login">
             <AdminMenuPage />
-          </AdminProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route
         path="/admin/categories"
         element={
-          <AdminProtectedRoute>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.ADMIN} loginPath="/admin/login">
             <AdminCategoriesPage />
-          </AdminProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
 
-      {/* Admin Inventory & Operations Routes (Phase 5) */}
+      {/* Admin Inventory & Operations Routes */}
       <Route
         path="/admin/inventory"
         element={
-          <AdminProtectedRoute>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.ADMIN} loginPath="/admin/login">
             <AdminInventoryDashboardPage />
-          </AdminProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route
         path="/admin/inventory/ingredients"
         element={
-          <AdminProtectedRoute>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.ADMIN} loginPath="/admin/login">
             <AdminIngredientsPage />
-          </AdminProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route
         path="/admin/inventory/stock"
         element={
-          <AdminProtectedRoute>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.ADMIN} loginPath="/admin/login">
             <AdminStockManagementPage />
-          </AdminProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route
         path="/admin/inventory/suppliers"
         element={
-          <AdminProtectedRoute>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.ADMIN} loginPath="/admin/login">
             <AdminSuppliersPage />
-          </AdminProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route
         path="/admin/inventory/purchases"
         element={
-          <AdminProtectedRoute>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.ADMIN} loginPath="/admin/login">
             <AdminPurchasesPage />
-          </AdminProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route
         path="/admin/inventory/alerts"
         element={
-          <AdminProtectedRoute>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.ADMIN} loginPath="/admin/login">
             <AdminStockAlertsPage />
-          </AdminProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route
         path="/admin/inventory/waste"
         element={
-          <AdminProtectedRoute>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.ADMIN} loginPath="/admin/login">
             <AdminWasteManagementPage />
-          </AdminProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route
         path="/admin/inventory/reports"
         element={
-          <AdminProtectedRoute>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.ADMIN} loginPath="/admin/login">
             <AdminInventoryReportsPage />
-          </AdminProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route
         path="/admin/tables"
         element={
-          <AdminProtectedRoute>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.ADMIN} loginPath="/admin/login">
             <AdminTablesPage />
-          </AdminProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route
         path="/admin/reservations"
         element={
-          <AdminProtectedRoute>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.ADMIN} loginPath="/admin/login">
             <AdminReservationsPage />
-          </AdminProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route
         path="/admin/customers"
         element={
-          <AdminProtectedRoute>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.ADMIN} loginPath="/admin/login">
             <AdminCustomersPage />
-          </AdminProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route
         path="/admin/staff"
         element={
-          <AdminProtectedRoute>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.ADMIN} loginPath="/admin/login">
             <AdminStaffPage />
-          </AdminProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route
         path="/admin/reports"
         element={
-          <AdminProtectedRoute>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.ADMIN} loginPath="/admin/login">
             <AdminReportsPage />
-          </AdminProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route
         path="/admin/notifications"
         element={
-          <AdminProtectedRoute>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.ADMIN} loginPath="/admin/login">
             <AdminNotificationsPage />
-          </AdminProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route
         path="/admin/settings"
         element={
-          <AdminProtectedRoute>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.ADMIN} loginPath="/admin/login">
             <AdminSettingsPage />
-          </AdminProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
-
-      {/* Staff Authentication Route */}
-      <Route path="/staff" element={<Navigate to="/waiter/login" replace />} />
 
       {/* Staff Operational Terminals */}
       <Route
         path="/waiter/dashboard"
         element={
-          <StaffProtectedRoute allowedRoles={WAITER_ROLES}>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.WAITER} loginPath="/waiter/login">
             <WaiterDashboardPage />
-          </StaffProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route path="/waiter" element={<Navigate to="/waiter/dashboard" replace />} />
@@ -321,9 +367,9 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/chef/dashboard"
         element={
-          <StaffProtectedRoute allowedRoles={KITCHEN_ROLES}>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.CHEF} loginPath="/chef/login">
             <KitchenDashboardPage />
-          </StaffProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route path="/chef" element={<Navigate to="/chef/dashboard" replace />} />
@@ -332,9 +378,9 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/cashier/dashboard"
         element={
-          <StaffProtectedRoute allowedRoles={CASHIER_ROLES}>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.CASHIER} loginPath="/cashier/login">
             <CashierDashboardPage />
-          </StaffProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route path="/cashier" element={<Navigate to="/cashier/dashboard" replace />} />
@@ -343,14 +389,19 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/manager/dashboard"
         element={
-          <StaffProtectedRoute allowedRoles={MANAGEMENT_ROLES}>
+          <RoleProtectedRoute allowedRoles={ROLE_GROUPS.MANAGER} loginPath="/manager/login">
             <ManagerDashboardPage />
-          </StaffProtectedRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route path="/manager" element={<Navigate to="/manager/dashboard" replace />} />
+      <Route path="/staff" element={<Navigate to="/waiter/login" replace />} />
+
+      {/* Access Denied / 403 Unauthorized Route */}
+      <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 };
+export default AppRoutes;

@@ -41,6 +41,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { ThemeToggle } from '../components/common/ThemeToggle';
 import { BRAND_CONFIG } from '../config/brand.config';
+import { getRoleDashboardPath } from '../utils/roleUtils';
 
 export const LoginPage: React.FC = () => {
   const { login, pendingAction, executePendingAction } = useAuth();
@@ -88,6 +89,14 @@ export const LoginPage: React.FC = () => {
         duration: 3000,
         position: 'top-right',
       });
+
+      // Strict role-based verification and redirection
+      const userRoleNorm = (authenticatedUser.role || '').toUpperCase().replace(/[\s-]+/g, '_');
+      if (userRoleNorm && userRoleNorm !== 'CUSTOMER') {
+        const dest = getRoleDashboardPath(authenticatedUser.role);
+        navigate(dest, { replace: true });
+        return;
+      }
 
       // Check if user came from a specific redirect or pending cart action
       const action = executePendingAction();
@@ -428,7 +437,7 @@ export const LoginPage: React.FC = () => {
             </Text>
 
             <Text fontSize="11px" color={mutedCol} pt={2}>
-              Staff Portal:{' '}
+              Staff Switch:{' '}
               <ChakraLink as={RouterLink} to="/waiter/login" color={gold} mr={2}>
                 Waiter
               </ChakraLink>
@@ -439,6 +448,10 @@ export const LoginPage: React.FC = () => {
               &bull;{' '}
               <ChakraLink as={RouterLink} to="/cashier/login" color={gold} mx={2}>
                 Cashier
+              </ChakraLink>
+              &bull;{' '}
+              <ChakraLink as={RouterLink} to="/manager/login" color={gold} mx={2}>
+                Manager
               </ChakraLink>
               &bull;{' '}
               <ChakraLink as={RouterLink} to="/admin/login" color={gold} ml={2}>

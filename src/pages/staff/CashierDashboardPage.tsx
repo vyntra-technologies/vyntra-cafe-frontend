@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box,
   Flex,
-  Grid,
   SimpleGrid,
   Heading,
   Text,
@@ -11,19 +10,10 @@ import {
   IconButton,
   HStack,
   VStack,
-  Card,
-  CardBody,
   Input,
   Select,
-  useColorModeValue,
   Icon,
   Divider,
-  Tabs,
-  TabList,
-  TabPanels,
-  Tab,
-  TabPanel,
-  useDisclosure,
   Modal,
   ModalOverlay,
   ModalContent,
@@ -31,24 +21,22 @@ import {
   ModalCloseButton,
   ModalBody,
   ModalFooter,
-  FormControl,
-  FormLabel,
+  useDisclosure,
   RadioGroup,
   Radio,
   Stack,
-  Spinner,
   Table,
   Thead,
   Tbody,
   Tr,
   Th,
   Td,
-  TableContainer,
+  Image,
+  Tooltip,
 } from '@chakra-ui/react';
 import {
   FiDollarSign,
   FiShoppingBag,
-  FiCoffee,
   FiCreditCard,
   FiSearch,
   FiTrash2,
@@ -58,10 +46,27 @@ import {
   FiPrinter,
   FiArrowRight,
   FiRefreshCw,
-  FiPercent,
   FiFileText,
+  FiEye,
+  FiPieChart,
+  FiClock,
+  FiCheck,
+  FiCopy,
 } from 'react-icons/fi';
+import { FaConciergeBell, FaReceipt, FaUtensils } from 'react-icons/fa';
+import { MdTableRestaurant } from 'react-icons/md';
 import { CashierLayout } from '../../components/staff/CashierLayout';
+import {
+  StatCard,
+  SearchBar,
+  FilterDropdown,
+  DataTable,
+  EmptyState,
+  LoadingSkeleton,
+  ConfirmationModal,
+} from '../../components/staff/StaffCommonUI';
+import { OrderDetailsDrawer } from '../../components/staff/OrderDetailsDrawer';
+import { STAFF_COLORS } from '../../components/staff/StaffTheme';
 import { posService, ShiftSummary, CreatePosOrderPayload } from '../../services/pos.service';
 import { menuService } from '../../services/menu.service';
 import { categoryService } from '../../services/category.service';
@@ -85,31 +90,23 @@ export const CashierDashboardPage: React.FC = () => {
   const [menuItems, setMenuItems] = useState<IMenuItem[]>([]);
   const [categories, setCategories] = useState<ICategory[]>([]);
   const [tables, setTables] = useState<ITable[]>([]);
-  const [pendingOrders, setPendingOrders] = useState<IOrder[]>([]);
+  const [allOrders, setAllOrders] = useState<IOrder[]>([]);
   const [shiftSummary, setShiftSummary] = useState<ShiftSummary | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTabName, setActiveTabName] = useState<string>('pos');
+  const [activeTab, setActiveTab] = useState<string>('dashboard');
 
-  const tabIndex = activeTabName === 'bills' ? 1 : 0;
-  const handleTabIndexChange = (index: number) => {
-    if (index === 0) setActiveTabName('pos');
-    else if (index === 1) setActiveTabName('bills');
-  };
-  const handleNavTabChange = (tabId: string) => {
-    if (tabId === 'shift') {
-      setActiveTabName('bills');
-    } else {
-      setActiveTabName(tabId);
-    }
-  };
+  // Drawer & Inspection State
+  const [inspectedOrder, setInspectedOrder] = useState<IOrder | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Filter & Search
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [ordersSearchQuery, setOrdersSearchQuery] = useState<string>('');
 
-  // POS Cart State
+  // POS Terminal State
   const [cart, setCart] = useState<PosCartItem[]>([]);
   const [orderType, setOrderType] = useState<'dine-in' | 'takeaway'>('takeaway');
   const [selectedTableId, setSelectedTableId] = useState<string>('');
@@ -117,6 +114,7 @@ export const CashierDashboardPage: React.FC = () => {
   const [customerPhone, setCustomerPhone] = useState<string>('');
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [orderNotes, setOrderNotes] = useState<string>('');
+  const [isSubmittingPosOrder, setIsSubmittingPosOrder] = useState(false);
 
   // Payment Settlement Modal
   const {
@@ -124,11 +122,11 @@ export const CashierDashboardPage: React.FC = () => {
     onOpen: onPayOpen,
     onClose: onPayClose,
   } = useDisclosure();
+  const [targetOrderForPayment, setTargetOrderForPayment] = useState<IOrder | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [tenderAmount, setTenderAmount] = useState<string>('');
   const [txnRef, setTxnRef] = useState<string>('');
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-  const [targetOrderForPayment, setTargetOrderForPayment] = useState<IOrder | null>(null);
 
   // Receipt Modal
   const {
@@ -136,33 +134,25 @@ export const CashierDashboardPage: React.FC = () => {
     onOpen: onReceiptOpen,
     onClose: onReceiptClose,
   } = useDisclosure();
-  const [receiptData, setReceiptData] = useState<any | null>(null);
-
-  // Theme tokens
-  const cardBg = useColorModeValue('#FFFFFF', '#141418');
-  const borderCol = useColorModeValue('rgba(0, 0, 0, 0.08)', 'rgba(255, 255, 255, 0.08)');
-  const mutedCol = useColorModeValue('#6B7280', '#9CA3AF');
-  const gold = useColorModeValue('#A87916', '#D4AF37');
-  const hoverBg = useColorModeValue('blackAlpha.50', 'whiteAlpha.50');
+  const [activeReceiptOrder, setActiveReceiptOrder] = useState<IOrder | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
-      const [mRes, cats, tbls, pendingRes, shift] = await Promise.all([
-        menuService.getAll({ isAvailable: true, limit: 150 }),
+      const [mRes, cats, tbls, ordersRes, shift] = await Promise.all([
+        menuService.getAll({ isAvailable: true, limit: 150 }).then((r) => r.items),
         categoryService.getAll().catch(() => []),
         tableService.getAll().catch(() => []),
-        posService.getOrders({ paymentStatus: 'pending', limit: 50 }).catch(() => ({ orders: [] })),
+        posService.getOrders({ limit: 100 }),
         posService.getShiftSummary().catch(() => null),
       ]);
-
-      setMenuItems(mRes.items);
+      setMenuItems(mRes);
       setCategories(cats);
       setTables(tbls);
-      setPendingOrders(pendingRes.orders);
-      if (shift) setShiftSummary(shift);
-    } catch (err) {
-      console.error('Failed to sync POS terminal data:', err);
-      toast.error('Failed to load POS catalog');
+      setAllOrders(ordersRes.orders || []);
+      setShiftSummary(shift);
+    } catch (err: any) {
+      console.error('Failed to load POS data:', err);
+      toast.error('Failed to synchronize cashier data');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -172,6 +162,7 @@ export const CashierDashboardPage: React.FC = () => {
   useEffect(() => {
     fetchData();
 
+    // Socket.io sync
     const onOrderChange = () => {
       fetchData();
     };
@@ -179,10 +170,13 @@ export const CashierDashboardPage: React.FC = () => {
     socketService.on('order:updated', onOrderChange);
     socketService.on('billing:payment-recorded', onOrderChange);
 
+    const interval = setInterval(fetchData, 15000); // 15s polling fallback
+
     return () => {
       socketService.off('order:created', onOrderChange);
       socketService.off('order:updated', onOrderChange);
       socketService.off('billing:payment-recorded', onOrderChange);
+      clearInterval(interval);
     };
   }, [fetchData]);
 
@@ -191,14 +185,63 @@ export const CashierDashboardPage: React.FC = () => {
     fetchData();
   };
 
-  // Cart operations
-  const addToCart = (item: IMenuItem) => {
+  // Unpaid Orders List
+  const unpaidOrders = useMemo(() => {
+    return allOrders.filter(
+      (o) => o.paymentStatus !== 'paid' && o.fulfillmentStatus !== 'cancelled'
+    );
+  }, [allOrders]);
+
+  // Paid Orders List
+  const paidOrders = useMemo(() => {
+    return allOrders.filter((o) => o.paymentStatus === 'paid');
+  }, [allOrders]);
+
+  // Derived Financial Statistics (Strictly real backend data)
+  const stats = useMemo(() => {
+    if (shiftSummary) {
+      const cash = shiftSummary.methodBreakdown?.cash || 0;
+      const online =
+        (shiftSummary.methodBreakdown?.card || 0) +
+        (shiftSummary.methodBreakdown?.upi || 0) +
+        (shiftSummary.methodBreakdown?.online || 0) +
+        (shiftSummary.methodBreakdown?.wallet || 0);
+
+      return {
+        todaySales: shiftSummary.totalCollected || shiftSummary.netRevenue || 0,
+        totalTxns: shiftSummary.totalTransactions || paidOrders.length,
+        paidOrdersCount: paidOrders.length,
+        pendingPaymentsCount: unpaidOrders.length,
+        cashCollection: cash,
+        onlineCollection: online,
+      };
+    }
+
+    // Fallback calculation from actual loaded orders
+    const todaySales = paidOrders.reduce((sum, o) => sum + (o.grandTotal || 0), 0);
+    const cashCollection = paidOrders
+      .filter((o) => o.paymentMethod === 'cash')
+      .reduce((sum, o) => sum + (o.grandTotal || 0), 0);
+    const onlineCollection = todaySales - cashCollection;
+
+    return {
+      todaySales,
+      totalTxns: paidOrders.length,
+      paidOrdersCount: paidOrders.length,
+      pendingPaymentsCount: unpaidOrders.length,
+      cashCollection,
+      onlineCollection,
+    };
+  }, [shiftSummary, paidOrders, unpaidOrders]);
+
+  // POS Cart Management
+  const handleAddToCart = (item: IMenuItem) => {
     setCart((prev) => {
-      const existing = prev.find((i) => i.menuItemId === item._id);
-      if (existing) {
-        return prev.map((i) =>
-          i.menuItemId === item._id ? { ...i, quantity: i.quantity + 1 } : i
-        );
+      const idx = prev.findIndex((i) => i.menuItemId === item._id);
+      if (idx > -1) {
+        const next = [...prev];
+        next[idx].quantity += 1;
+        return next;
       }
       return [
         ...prev,
@@ -207,813 +250,1304 @@ export const CashierDashboardPage: React.FC = () => {
           name: item.name,
           basePrice: item.basePrice,
           quantity: 1,
-          taxPercentage: item.taxPercentage || 5,
+          taxPercentage: item.taxPercentage ?? 5,
         },
       ];
     });
   };
 
-  const updateQuantity = (menuItemId: string, qty: number) => {
-    if (qty <= 0) {
-      setCart((prev) => prev.filter((i) => i.menuItemId !== menuItemId));
-    } else {
-      setCart((prev) =>
-        prev.map((i) => (i.menuItemId === menuItemId ? { ...i, quantity: qty } : i))
-      );
-    }
+  const handleUpdateQty = (index: number, delta: number) => {
+    setCart((prev) => {
+      const next = [...prev];
+      next[index].quantity += delta;
+      if (next[index].quantity <= 0) {
+        return next.filter((_, i) => i !== index);
+      }
+      return next;
+    });
   };
 
-  const clearCart = () => {
+  const handleRemoveFromCart = (index: number) => {
+    setCart((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleClearCart = () => {
     setCart([]);
-    setDiscountPercent(0);
-    setCustomerName('');
-    setCustomerPhone('');
-    setSelectedTableId('');
-    setOrderNotes('');
   };
 
-  // Cart calculations
-  const subtotal = cart.reduce((sum, item) => sum + item.basePrice * item.quantity, 0);
-  const discountAmount = parseFloat(((subtotal * discountPercent) / 100).toFixed(2));
-  const discountedSubtotal = Math.max(0, subtotal - discountAmount);
-  // 5% standard restaurant GST/tax
-  const taxAmount = parseFloat((discountedSubtotal * 0.05).toFixed(2));
-  const grandTotal = parseFloat((discountedSubtotal + taxAmount).toFixed(2));
+  // Cart Calculations
+  const cartSubtotal = cart.reduce((sum, i) => sum + i.basePrice * i.quantity, 0);
+  const cartDiscountAmount = (cartSubtotal * discountPercent) / 100;
+  const cartTax = ((cartSubtotal - cartDiscountAmount) * 5) / 100;
+  const cartTotal = cartSubtotal - cartDiscountAmount + cartTax;
 
-  // Payment triggers
-  const handleCheckoutNewOrder = () => {
-    if (cart.length === 0) {
-      toast.error('Cart is empty');
-      return;
-    }
+  // Filtered Menu Items
+  const filteredMenuItems = useMemo(() => {
+    return menuItems.filter((item) => {
+      const matchesSearch =
+        !searchQuery ||
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      const itemCategory = typeof item.category === 'object' ? (item.category as any)?.name : item.category;
+      const matchesCat = selectedCategory === 'all' || itemCategory === selectedCategory;
+
+      return matchesSearch && matchesCat;
+    });
+  }, [menuItems, searchQuery, selectedCategory]);
+
+  // Submit POS Order
+  const handleSubmitPosOrder = async (settleImmediately: boolean = false) => {
     if (orderType === 'dine-in' && !selectedTableId) {
       toast.error('Please select an active table for dine-in');
       return;
     }
-    setTargetOrderForPayment(null);
-    setTenderAmount(grandTotal.toString());
-    setPaymentMethod('cash');
-    setTxnRef('');
-    onPayOpen();
-  };
-
-  const handlePayExistingOrder = (order: IOrder) => {
-    setTargetOrderForPayment(order);
-    setTenderAmount(order.grandTotal.toString());
-    setPaymentMethod('cash');
-    setTxnRef('');
-    onPayOpen();
-  };
-
-  const handleProcessSettlement = async () => {
-    const payAmt = parseFloat(tenderAmount);
-    if (isNaN(payAmt) || payAmt <= 0) {
-      toast.error('Please enter a valid amount');
+    if (cart.length === 0) {
+      toast.error('Please add at least 1 menu item to the cart');
       return;
+    }
+
+    setIsSubmittingPosOrder(true);
+    try {
+      const payload: CreatePosOrderPayload = {
+        orderType,
+        tableId: orderType === 'dine-in' ? selectedTableId : undefined,
+        customerName: customerName.trim() || undefined,
+        customerPhone: customerPhone.trim() || undefined,
+        notes: orderNotes.trim() || undefined,
+        items: cart.map((i) => ({
+          menuItemId: i.menuItemId,
+          quantity: i.quantity,
+          variantName: i.variantName,
+          notes: i.notes,
+        })),
+      };
+
+      const newOrder = await posService.createOrder(payload);
+
+      toast.success(`POS Order #${newOrder.orderNumber} created!`);
+      handleClearCart();
+      setCustomerName('');
+      setCustomerPhone('');
+      setOrderNotes('');
+
+      fetchData();
+
+      if (settleImmediately && newOrder._id) {
+        setTargetOrderForPayment(newOrder);
+        setTenderAmount(String(newOrder.grandTotal));
+        onPayOpen();
+      } else {
+        setActiveTab('bills');
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to place POS order');
+    } finally {
+      setIsSubmittingPosOrder(false);
+    }
+  };
+
+  // Open Payment Settlement Modal for an existing order
+  const handleOpenPayment = (order: IOrder) => {
+    setTargetOrderForPayment(order);
+    setTenderAmount(String(order.grandTotal));
+    setTxnRef('');
+    setPaymentMethod(order.paymentMethod || 'cash');
+    onPayOpen();
+  };
+
+  // Process and Settle Payment (With Idempotency Lock)
+  const handleProcessPayment = async () => {
+    if (!targetOrderForPayment) return;
+
+    if (isProcessingPayment) return; // Idempotency protection
+
+    const parsedTender = parseFloat(tenderAmount);
+    if (isNaN(parsedTender) || parsedTender < targetOrderForPayment.grandTotal) {
+      if (paymentMethod === 'cash') {
+        toast.error(`Tender amount must be at least ₹${targetOrderForPayment.grandTotal.toFixed(2)}`);
+        return;
+      }
     }
 
     setIsProcessingPayment(true);
     try {
-      let orderIdToBill = targetOrderForPayment?._id;
-
-      // If this is a newly created order from POS cart
-      if (!orderIdToBill) {
-        const payload: CreatePosOrderPayload = {
-          orderType,
-          tableId: orderType === 'dine-in' ? selectedTableId : undefined,
-          customerName: customerName.trim() || undefined,
-          customerPhone: customerPhone.trim() || undefined,
-          notes: orderNotes.trim() || undefined,
-          items: cart.map((i) => ({
-            menuItemId: i.menuItemId,
-            quantity: i.quantity,
-            notes: i.notes,
-          })),
-        };
-
-        const newOrder = await posService.createOrder(payload);
-        orderIdToBill = newOrder._id;
-
-        // Apply discount if provided
-        if (discountPercent > 0) {
-          await posService.applyDiscount(orderIdToBill, {
-            discountType: 'percentage',
-            discountValue: discountPercent,
-            reason: `Cashier discount (${discountPercent}%)`,
-          }).catch(() => {});
-        }
-      }
-
-      // Collect Payment
-      await posService.collectPayment(orderIdToBill, {
-        amount: payAmt,
+      await posService.collectPayment(targetOrderForPayment._id, {
+        amount: targetOrderForPayment.grandTotal,
         method: paymentMethod,
         transactionReference: txnRef.trim() || undefined,
       });
 
-      // Fetch official receipt
-      const receipt = await posService.getReceipt(orderIdToBill).catch(() => null);
-      if (receipt) {
-        setReceiptData(receipt);
-      }
-
-      toast.success('Payment successfully recorded & bill settled!');
+      toast.success(`Order #${targetOrderForPayment.orderNumber} settled successfully!`);
       onPayClose();
 
-      if (!targetOrderForPayment) {
-        clearCart();
-      }
-
-      if (receipt) {
-        onReceiptOpen();
-      }
+      // Open receipt automatically
+      setActiveReceiptOrder({
+        ...targetOrderForPayment,
+        paymentStatus: 'paid',
+        paymentMethod,
+      });
+      onReceiptOpen();
 
       fetchData();
     } catch (err: any) {
-      const msg = err.response?.data?.message || err.message || 'Payment processing failed';
-      toast.error(msg);
+      toast.error(err.response?.data?.message || 'Failed to process payment settlement');
     } finally {
       setIsProcessingPayment(false);
     }
   };
 
-  // Change calculator
-  const tenderNumber = parseFloat(tenderAmount) || 0;
-  const currentTotal = targetOrderForPayment ? targetOrderForPayment.grandTotal : grandTotal;
-  const changeDue = Math.max(0, tenderNumber - currentTotal);
+  // Print Receipt handler
+  const handlePrintReceipt = () => {
+    window.print();
+  };
 
-  // Filter items
-  const filteredItems = menuItems.filter((item) => {
-    const matchesCat =
-      selectedCategory === 'all' ||
-      (typeof item.category === 'object'
-        ? item.category._id === selectedCategory
-        : item.category === selectedCategory);
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCat && matchesSearch;
-  });
+  if (loading) {
+    return (
+      <CashierLayout activeTab={activeTab} onTabChange={setActiveTab}>
+        <LoadingSkeleton rows={5} />
+      </CashierLayout>
+    );
+  }
 
   return (
     <CashierLayout
-      activeTab={activeTabName}
-      onTabChange={handleNavTabChange}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
       onRefresh={handleRefresh}
       isRefreshing={refreshing}
-      unpaidBillsCount={pendingOrders.length}
+      unpaidBillsCount={unpaidOrders.length}
     >
-      {/* Shift Revenue Strip */}
-      <SimpleGrid columns={{ base: 2, md: 5 }} spacing={4} mb={6}>
-        <Card bg={cardBg} border="1px solid" borderColor={borderCol} borderRadius="xl">
-          <CardBody p={4}>
-            <Text fontSize="xs" color={mutedCol} textTransform="uppercase">
-              Shift Total Sales
-            </Text>
-            <Heading size="lg" color={gold}>
-              ₹{(shiftSummary?.totalCollected ?? 0).toFixed(2)}
-            </Heading>
-          </CardBody>
-        </Card>
+      {/* VIEW 1: CASHIER DASHBOARD OVERVIEW */}
+      {activeTab === 'dashboard' && (
+        <VStack spacing={6} align="stretch">
+          {/* 6 Core Financial Stat Cards */}
+          <SimpleGrid columns={{ base: 2, sm: 3, lg: 6 }} spacing={{ base: 3, md: 4 }}>
+            <StatCard
+              title="Today's Sales"
+              value={`₹${stats.todaySales.toFixed(0)}`}
+              subtitle="Net Revenue"
+              icon={FiDollarSign}
+              colorScheme="gold"
+              onClick={() => setActiveTab('shift')}
+            />
+            <StatCard
+              title="Transactions"
+              value={stats.totalTxns}
+              subtitle="Settled Today"
+              icon={FiFileText}
+              colorScheme="blue"
+              onClick={() => setActiveTab('transactions')}
+            />
+            <StatCard
+              title="Paid Orders"
+              value={stats.paidOrdersCount}
+              subtitle="Cleared Bills"
+              icon={FiCheckCircle}
+              colorScheme="green"
+              onClick={() => setActiveTab('orders')}
+            />
+            <StatCard
+              title="Pending Bills"
+              value={stats.pendingPaymentsCount}
+              subtitle="Uncollected Dues"
+              icon={FiClock}
+              colorScheme="red"
+              badge={stats.pendingPaymentsCount > 0 ? 'DUE' : undefined}
+              onClick={() => setActiveTab('bills')}
+            />
+            <StatCard
+              title="Cash Collection"
+              value={`₹${stats.cashCollection.toFixed(0)}`}
+              subtitle="In Cash Drawer"
+              icon={FiDollarSign}
+              colorScheme="yellow"
+              onClick={() => setActiveTab('shift')}
+            />
+            <StatCard
+              title="Online / Digital"
+              value={`₹${stats.onlineCollection.toFixed(0)}`}
+              subtitle="Card & UPI"
+              icon={FiCreditCard}
+              colorScheme="blue"
+              onClick={() => setActiveTab('shift')}
+            />
+          </SimpleGrid>
 
-        <Card bg={cardBg} border="1px solid" borderColor={borderCol} borderRadius="xl">
-          <CardBody p={4}>
-            <Text fontSize="xs" color={mutedCol} textTransform="uppercase">
-              Cash Drawer
-            </Text>
-            <Heading size="lg" color="green.400">
-              ₹{(shiftSummary?.methodBreakdown?.cash ?? 0).toFixed(2)}
-            </Heading>
-          </CardBody>
-        </Card>
+          {/* Quick Action Navigation Buttons */}
+          <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={4}>
+            <Button
+              h="auto"
+              py={4}
+              bg={STAFF_COLORS.primaryGold}
+              color="#0B0B0D"
+              _hover={{ bg: STAFF_COLORS.lightGold }}
+              borderRadius="2xl"
+              leftIcon={<FiShoppingBag fontSize="20px" />}
+              onClick={() => setActiveTab('pos')}
+            >
+              <VStack align="flex-start" spacing={0} ml={2}>
+                <Text fontWeight="800" fontSize="sm">Open POS Terminal</Text>
+                <Text fontSize="10px" opacity="0.8">Punch in new counter order</Text>
+              </VStack>
+            </Button>
 
-        <Card bg={cardBg} border="1px solid" borderColor={borderCol} borderRadius="xl">
-          <CardBody p={4}>
-            <Text fontSize="xs" color={mutedCol} textTransform="uppercase">
-              UPI / QR
-            </Text>
-            <Heading size="lg" color="teal.400">
-              ₹{(shiftSummary?.methodBreakdown?.upi ?? 0).toFixed(2)}
-            </Heading>
-          </CardBody>
-        </Card>
+            <Button
+              h="auto"
+              py={4}
+              variant="outline"
+              borderColor={STAFF_COLORS.border}
+              color={STAFF_COLORS.text}
+              _hover={{ borderColor: STAFF_COLORS.primaryGold, bg: STAFF_COLORS.card }}
+              borderRadius="2xl"
+              leftIcon={<FiDollarSign fontSize="20px" />}
+              onClick={() => setActiveTab('bills')}
+            >
+              <VStack align="flex-start" spacing={0} ml={2}>
+                <Text fontWeight="800" fontSize="sm">Settle Unpaid Bills ({unpaidOrders.length})</Text>
+                <Text fontSize="10px" color={STAFF_COLORS.secondaryText}>Process guest checkouts</Text>
+              </VStack>
+            </Button>
 
-        <Card bg={cardBg} border="1px solid" borderColor={borderCol} borderRadius="xl">
-          <CardBody p={4}>
-            <Text fontSize="xs" color={mutedCol} textTransform="uppercase">
-              Card POS
-            </Text>
-            <Heading size="lg" color="blue.400">
-              ₹{(shiftSummary?.methodBreakdown?.card ?? 0).toFixed(2)}
-            </Heading>
-          </CardBody>
-        </Card>
+            <Button
+              h="auto"
+              py={4}
+              variant="outline"
+              borderColor={STAFF_COLORS.border}
+              color={STAFF_COLORS.text}
+              _hover={{ borderColor: STAFF_COLORS.primaryGold, bg: STAFF_COLORS.card }}
+              borderRadius="2xl"
+              leftIcon={<FiPieChart fontSize="20px" />}
+              onClick={() => setActiveTab('shift')}
+            >
+              <VStack align="flex-start" spacing={0} ml={2}>
+                <Text fontWeight="800" fontSize="sm">Shift Register Report</Text>
+                <Text fontSize="10px" color={STAFF_COLORS.secondaryText}>Review cash drawer & totals</Text>
+              </VStack>
+            </Button>
+          </SimpleGrid>
 
-        <Card bg={cardBg} border="1px solid" borderColor={borderCol} borderRadius="xl">
-          <CardBody p={4}>
-            <Text fontSize="xs" color={mutedCol} textTransform="uppercase">
-              Pending Bills
-            </Text>
-            <Heading size="lg" color="red.400">
-              {pendingOrders.length}
-            </Heading>
-          </CardBody>
-        </Card>
-      </SimpleGrid>
+          {/* Quick Settlement Queue Table */}
+          <Box
+            bg={STAFF_COLORS.card}
+            borderWidth="1px"
+            borderColor={STAFF_COLORS.border}
+            borderRadius="2xl"
+            p={5}
+          >
+            <Flex justify="space-between" align="center" mb={4}>
+              <HStack spacing={2}>
+                <Icon as={FiClock} color={STAFF_COLORS.warning} />
+                <Text fontSize="sm" fontWeight="800" color={STAFF_COLORS.text} textTransform="uppercase">
+                  Unpaid Bills Queue ({unpaidOrders.length})
+                </Text>
+              </HStack>
+              <Button size="xs" variant="ghost" color={STAFF_COLORS.primaryGold} onClick={() => setActiveTab('bills')}>
+                View All Bills
+              </Button>
+            </Flex>
 
-      {/* Main Terminal Tabs */}
-      <Tabs index={tabIndex} onChange={handleTabIndexChange} colorScheme="green" variant="enclosed">
-        <TabList borderBottom="1px solid" borderColor={borderCol} mb={4}>
-          <Tab fontWeight="bold" fontSize="sm">
-            POS Register (New Ticket)
-          </Tab>
-          <Tab fontWeight="bold" fontSize="sm">
-            Unsettled Tables & Bills ({pendingOrders.length})
-          </Tab>
-        </TabList>
-
-        <TabPanels>
-          {/* TAB 1: POS REGISTER */}
-          <TabPanel p={0}>
-            <Grid templateColumns={{ base: '1fr', lg: '1fr 420px' }} gap={6}>
-              {/* LEFT: PRODUCTS / MENU TILES */}
-              <Box>
-                {/* Search & Categories Bar */}
-                <Flex gap={3} mb={4} flexWrap="wrap">
-                  <Input
-                    placeholder="Search menu items..."
-                    maxW="300px"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    focusBorderColor={gold}
-                    bg={cardBg}
-                  />
-
-                  <HStack spacing={2} overflowX="auto" pb={1} flex="1">
-                    <Button
-                      size="sm"
-                      variant={selectedCategory === 'all' ? 'solid' : 'outline'}
-                      colorScheme={selectedCategory === 'all' ? 'green' : undefined}
-                      borderColor={borderCol}
-                      onClick={() => setSelectedCategory('all')}
-                    >
-                      All ({menuItems.length})
-                    </Button>
-                    {categories.map((c) => (
+            {unpaidOrders.length === 0 ? (
+              <EmptyState
+                title="All Bills Settled"
+                message="There are currently no outstanding unpaid checks."
+                icon={FiCheckCircle}
+              />
+            ) : (
+              <DataTable<IOrder>
+                columns={[
+                  {
+                    header: 'Order #',
+                    cell: (o) => (
+                      <Text fontWeight="800" color={STAFF_COLORS.primaryGold} fontFamily="mono">
+                        #{o.orderNumber}
+                      </Text>
+                    ),
+                  },
+                  {
+                    header: 'Table / Mode',
+                    cell: (o) => (
+                      <Badge colorScheme={o.orderType === 'dine-in' ? 'orange' : 'teal'}>
+                        {o.orderType === 'dine-in'
+                          ? `Table #${o.tableNumber || (o.tableId as any)?.tableNumber || '-'}`
+                          : 'Takeaway'}
+                      </Badge>
+                    ),
+                  },
+                  {
+                    header: 'Customer',
+                    cell: (o) => <Text>{o.customerName || 'Walk-in'}</Text>,
+                  },
+                  {
+                    header: 'Amount Due',
+                    cell: (o) => (
+                      <Text fontWeight="800" color={STAFF_COLORS.primaryGold} fontSize="sm">
+                        ₹{o.grandTotal?.toFixed(2)}
+                      </Text>
+                    ),
+                  },
+                  {
+                    header: 'Status',
+                    cell: (o) => (
+                      <Badge colorScheme="red">UNPAID</Badge>
+                    ),
+                  },
+                  {
+                    header: 'Action',
+                    align: 'right',
+                    cell: (o) => (
                       <Button
-                        key={c._id}
-                        size="sm"
-                        variant={selectedCategory === c._id ? 'solid' : 'outline'}
-                        colorScheme={selectedCategory === c._id ? 'green' : undefined}
-                        borderColor={borderCol}
-                        onClick={() => setSelectedCategory(c._id)}
+                        size="xs"
+                        bg={STAFF_COLORS.primaryGold}
+                        color="#0B0B0D"
+                        _hover={{ bg: STAFF_COLORS.lightGold }}
+                        borderRadius="lg"
+                        onClick={() => handleOpenPayment(o)}
                       >
-                        {c.name}
+                        Settle Payment
                       </Button>
-                    ))}
-                  </HStack>
-                </Flex>
+                    ),
+                  },
+                ]}
+                data={unpaidOrders.slice(0, 5)}
+              />
+            )}
+          </Box>
+        </VStack>
+      )}
 
-                {/* Items Grid */}
-                {loading ? (
-                  <Flex justify="center" align="center" h="300px">
-                    <Spinner color={gold} size="xl" />
-                  </Flex>
-                ) : filteredItems.length === 0 ? (
-                  <Card bg={cardBg} border="1px solid" borderColor={borderCol} p={8} textAlign="center">
-                    <Text color={mutedCol}>No menu items found.</Text>
-                  </Card>
-                ) : (
-                  <SimpleGrid columns={{ base: 2, sm: 3, md: 4, xl: 4 }} spacing={3}>
-                    {filteredItems.map((item) => (
-                      <Card
-                        key={item._id}
-                        bg={cardBg}
-                        border="1px solid"
-                        borderColor={borderCol}
-                        borderRadius="xl"
-                        cursor="pointer"
-                        transition="all 0.15s"
-                        _hover={{
-                          borderColor: gold,
-                          transform: 'translateY(-2px)',
-                          boxShadow: 'md',
-                        }}
-                        onClick={() => addToCart(item)}
-                      >
-                        <CardBody p={3}>
-                          <Flex justify="space-between" align="start" mb={2}>
+      {/* VIEW 2: FULL POS TERMINAL */}
+      {activeTab === 'pos' && (
+        <SimpleGrid columns={{ base: 1, lg: 3 }} spacing={6}>
+          {/* Left 2 Columns: Food Items & Categories */}
+          <Box gridColumn={{ lg: 'span 2' }}>
+            <VStack spacing={4} align="stretch">
+              {/* Category Filter Pills & Search */}
+              <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
+                <SearchBar
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  placeholder="Search POS menu catalog..."
+                  maxW="300px"
+                />
+
+                <Select
+                  size="sm"
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  bg={STAFF_COLORS.card}
+                  borderColor={STAFF_COLORS.border}
+                  borderRadius="xl"
+                  color={STAFF_COLORS.text}
+                  maxW="200px"
+                >
+                  <option value="all" style={{ background: STAFF_COLORS.sidebar }}>All Categories</option>
+                  {categories.map((cat) => (
+                    <option key={cat._id} value={cat.name} style={{ background: STAFF_COLORS.sidebar }}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </Select>
+              </Flex>
+
+              {/* Items Grid */}
+              <SimpleGrid columns={{ base: 1, sm: 2, xl: 3 }} spacing={3}>
+                {filteredMenuItems.map((item) => {
+                  const cartItem = cart.find((c) => c.menuItemId === item._id);
+                  const inCartQty = cartItem?.quantity || 0;
+
+                  return (
+                    <Box
+                      key={item._id}
+                      p={3.5}
+                      borderRadius="2xl"
+                      bg={STAFF_COLORS.card}
+                      borderWidth="1px"
+                      borderColor={inCartQty > 0 ? STAFF_COLORS.primaryGold : STAFF_COLORS.border}
+                      transition="all 0.2s ease"
+                      _hover={{ borderColor: STAFF_COLORS.borderGold }}
+                    >
+                      <Flex justify="space-between" align="flex-start" gap={2}>
+                        <Box flex="1">
+                          <HStack spacing={1.5} mb={1}>
                             <Badge
-                              colorScheme={item.isVegetarian ? 'green' : 'red'}
                               fontSize="9px"
+                              colorScheme={item.isVegetarian ? 'green' : 'red'}
                             >
                               {item.isVegetarian ? 'VEG' : 'NON-VEG'}
                             </Badge>
-                            <Text fontWeight="bold" fontSize="sm" color={gold}>
-                              ₹{item.basePrice}
-                            </Text>
-                          </Flex>
-                          <Text fontWeight="bold" fontSize="xs" noOfLines={2} mb={2}>
+                          </HStack>
+
+                          <Text fontSize="sm" fontWeight="700" color={STAFF_COLORS.text} noOfLines={1}>
                             {item.name}
                           </Text>
-                          <Button
-                            size="xs"
-                            w="full"
-                            colorScheme="green"
-                            variant="subtle"
-                            leftIcon={<FiPlus />}
-                          >
-                            Add
-                          </Button>
-                        </CardBody>
-                      </Card>
-                    ))}
-                  </SimpleGrid>
-                )}
-              </Box>
 
-              {/* RIGHT: POS CART TICKET */}
-              <Box>
-                <Card
-                  bg={cardBg}
-                  border="1px solid"
-                  borderColor={borderCol}
-                  borderRadius="2xl"
-                  boxShadow="lg"
-                  position="sticky"
-                  top="80px"
-                >
-                  <CardBody p={5}>
-                    {/* Order Type Header */}
-                    <Flex justify="space-between" align="center" mb={4}>
-                      <HStack>
-                        <Icon as={FiShoppingBag} color={gold} />
-                        <Heading size="sm">Current Ticket</Heading>
-                      </HStack>
-                      {cart.length > 0 && (
-                        <Button size="xs" variant="ghost" color="red.400" onClick={clearCart}>
-                          Clear
-                        </Button>
-                      )}
-                    </Flex>
-
-                    {/* Dine-in vs Takeaway Selector */}
-                    <RadioGroup
-                      value={orderType}
-                      onChange={(val: any) => setOrderType(val)}
-                      mb={4}
-                    >
-                      <Stack direction="row" spacing={4}>
-                        <Radio value="takeaway">Takeaway Counter</Radio>
-                        <Radio value="dine-in">Dine-In Table</Radio>
-                      </Stack>
-                    </RadioGroup>
-
-                    {/* Table Dropdown (if Dine-in) */}
-                    {orderType === 'dine-in' && (
-                      <FormControl mb={3} isRequired>
-                        <FormLabel fontSize="xs">Assign Table</FormLabel>
-                        <Select
-                          size="sm"
-                          placeholder="Select table"
-                          value={selectedTableId}
-                          onChange={(e) => setSelectedTableId(e.target.value)}
-                          focusBorderColor={gold}
-                        >
-                          {tables.map((t) => (
-                            <option key={t._id} value={t._id}>
-                              Table {t.tableNumber} ({t.section} • {t.status})
-                            </option>
-                          ))}
-                        </Select>
-                      </FormControl>
-                    )}
-
-                    {/* Optional Customer info */}
-                    <HStack spacing={2} mb={3}>
-                      <Input
-                        placeholder="Customer name (optional)"
-                        size="xs"
-                        value={customerName}
-                        onChange={(e) => setCustomerName(e.target.value)}
-                        focusBorderColor={gold}
-                      />
-                      <Input
-                        placeholder="Phone (optional)"
-                        size="xs"
-                        value={customerPhone}
-                        onChange={(e) => setCustomerPhone(e.target.value)}
-                        focusBorderColor={gold}
-                      />
-                    </HStack>
-
-                    <Divider borderColor={borderCol} my={2} />
-
-                    {/* Cart Items List */}
-                    <VStack
-                      spacing={2}
-                      align="stretch"
-                      maxH="240px"
-                      overflowY="auto"
-                      my={2}
-                      pr={1}
-                    >
-                      {cart.length === 0 ? (
-                        <Flex justify="center" align="center" h="140px">
-                          <Text fontSize="xs" color={mutedCol}>
-                            Select items from catalog to build ticket.
+                          <Text fontSize="xs" fontWeight="800" color={STAFF_COLORS.primaryGold} mt={1}>
+                            ₹{item.basePrice.toFixed(2)}
                           </Text>
-                        </Flex>
-                      ) : (
-                        cart.map((item) => (
-                          <Flex
-                            key={item.menuItemId}
-                            justify="space-between"
-                            align="center"
-                            p={2}
-                            borderRadius="lg"
-                            bg={useColorModeValue('blackAlpha.50', 'whiteAlpha.50')}
-                          >
-                            <VStack align="start" spacing={0} flex="1">
-                              <Text fontSize="xs" fontWeight="bold">
-                                {item.name}
-                              </Text>
-                              <Text fontSize="10px" color={mutedCol}>
-                                ₹{item.basePrice} ea
-                              </Text>
-                            </VStack>
+                        </Box>
 
-                            <HStack spacing={1}>
-                              <IconButton
-                                aria-label="minus"
-                                icon={<FiMinus />}
-                                size="xs"
-                                onClick={() => updateQuantity(item.menuItemId, item.quantity - 1)}
-                              />
-                              <Text fontSize="xs" fontWeight="bold" w="20px" textAlign="center">
-                                {item.quantity}
-                              </Text>
-                              <IconButton
-                                aria-label="plus"
-                                icon={<FiPlus />}
-                                size="xs"
-                                onClick={() => updateQuantity(item.menuItemId, item.quantity + 1)}
-                              />
-                            </HStack>
-
-                            <Text fontSize="xs" fontWeight="bold" w="60px" textAlign="right">
-                              ₹{(item.basePrice * item.quantity).toFixed(2)}
-                            </Text>
-                          </Flex>
-                        ))
-                      )}
-                    </VStack>
-
-                    <Divider borderColor={borderCol} my={3} />
-
-                    {/* Discount & Totals Breakdown */}
-                    <VStack spacing={2} align="stretch" fontSize="xs">
-                      <Flex justify="space-between">
-                        <Text color={mutedCol}>Subtotal</Text>
-                        <Text fontWeight="medium">₹{subtotal.toFixed(2)}</Text>
+                        {item.images && item.images.length > 0 && (
+                          <Image
+                            src={item.images[0]}
+                            alt={item.name}
+                            w="48px"
+                            h="48px"
+                            borderRadius="xl"
+                            objectFit="cover"
+                            fallbackSrc="https://images.unsplash.com/photo-1509785307050-d4066910ec1e?w=100&q=80"
+                          />
+                        )}
                       </Flex>
 
-                      <HStack justify="space-between">
-                        <HStack spacing={1}>
-                          <Text color={mutedCol}>Discount %</Text>
-                          {[0, 5, 10, 15].map((pct) => (
-                            <Button
-                              key={pct}
-                              size="xs"
-                              variant={discountPercent === pct ? 'solid' : 'outline'}
-                              colorScheme={discountPercent === pct ? 'yellow' : undefined}
-                              h="20px"
-                              px={1.5}
-                              fontSize="10px"
-                              onClick={() => setDiscountPercent(pct)}
-                            >
-                              {pct}%
-                            </Button>
-                          ))}
-                        </HStack>
-                        <Text color="red.400">-₹{discountAmount.toFixed(2)}</Text>
-                      </HStack>
-
-                      <Flex justify="space-between">
-                        <Text color={mutedCol}>GST / Restaurant Tax (5%)</Text>
-                        <Text fontWeight="medium">₹{taxAmount.toFixed(2)}</Text>
-                      </Flex>
-
-                      <Divider borderColor={borderCol} my={1} />
-
-                      <Flex justify="space-between" fontSize="md" fontWeight="bold">
-                        <Text>Grand Total</Text>
-                        <Text color={gold}>₹{grandTotal.toFixed(2)}</Text>
-                      </Flex>
-                    </VStack>
-
-                    {/* Action Button */}
-                    <Button
-                      w="full"
-                      mt={4}
-                      colorScheme="green"
-                      size="lg"
-                      fontSize="sm"
-                      fontWeight="bold"
-                      rightIcon={<FiArrowRight />}
-                      isDisabled={cart.length === 0}
-                      onClick={handleCheckoutNewOrder}
-                    >
-                      COLLECT PAYMENT (₹{grandTotal.toFixed(2)})
-                    </Button>
-                  </CardBody>
-                </Card>
-              </Box>
-            </Grid>
-          </TabPanel>
-
-          {/* TAB 2: UNSETTLED TABLES & BILLS */}
-          <TabPanel p={0}>
-            {pendingOrders.length === 0 ? (
-              <Card bg={cardBg} border="1px solid" borderColor={borderCol} p={8} textAlign="center">
-                <Text color={mutedCol}>All table bills are fully settled! No pending balances.</Text>
-              </Card>
-            ) : (
-              <TableContainer bg={cardBg} borderRadius="xl" border="1px solid" borderColor={borderCol}>
-                <Table variant="simple" size="sm">
-                  <Thead bg={useColorModeValue('blackAlpha.50', 'whiteAlpha.50')}>
-                    <Tr>
-                      <Th>Order #</Th>
-                      <Th>Table / Type</Th>
-                      <Th>Items Count</Th>
-                      <Th>Fulfillment</Th>
-                      <Th>Total Due</Th>
-                      <Th>Created</Th>
-                      <Th textAlign="right">Action</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {pendingOrders.map((ord) => (
-                      <Tr key={ord._id}>
-                        <Td fontWeight="bold">#{ord.orderNumber}</Td>
-                        <Td>
-                          <Badge colorScheme="purple">
-                            {ord.tableNumber ? `Table #${ord.tableNumber}` : ord.orderType}
-                          </Badge>
-                        </Td>
-                        <Td>{ord.items.length} dishes</Td>
-                        <Td>
-                          <Badge colorScheme="orange">{ord.fulfillmentStatus}</Badge>
-                        </Td>
-                        <Td fontWeight="bold" color={gold}>
-                          ₹{ord.grandTotal.toFixed(2)}
-                        </Td>
-                        <Td color={mutedCol} fontSize="xs">
-                          {new Date(ord.createdAt).toLocaleTimeString()}
-                        </Td>
-                        <Td textAlign="right">
-                          <Button
-                            size="xs"
-                            colorScheme="green"
-                            leftIcon={<FiDollarSign />}
-                            onClick={() => handlePayExistingOrder(ord)}
-                          >
-                            Collect Bill
-                          </Button>
-                        </Td>
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
-              </TableContainer>
-            )}
-          </TabPanel>
-        </TabPanels>
-      </Tabs>
-
-      {/* PAYMENT TENDER MODAL */}
-      <Modal isOpen={isPayOpen} onClose={onPayClose} size="lg">
-        <ModalOverlay backdropFilter="blur(6px)" />
-        <ModalContent bg={cardBg} border="1px solid" borderColor={borderCol} borderRadius="2xl">
-          <ModalHeader>
-            <HStack>
-              <Icon as={FiCreditCard} color={gold} />
-              <Text>Record Customer Payment</Text>
-            </HStack>
-          </ModalHeader>
-          <ModalCloseButton />
-
-          <ModalBody>
-            <VStack spacing={4} align="stretch">
-              <Box p={4} bg={useColorModeValue('blackAlpha.50', 'whiteAlpha.50')} borderRadius="xl" textAlign="center">
-                <Text fontSize="xs" color={mutedCol} textTransform="uppercase">
-                  Total Balance Due
-                </Text>
-                <Heading size="xl" color={gold}>
-                  ₹{currentTotal.toFixed(2)}
-                </Heading>
-              </Box>
-
-              {/* Payment Methods */}
-              <FormControl>
-                <FormLabel fontSize="xs" textTransform="uppercase">
-                  Select Payment Method
-                </FormLabel>
-                <SimpleGrid columns={4} spacing={2}>
-                  {(['cash', 'upi', 'card', 'online'] as PaymentMethod[]).map((m) => (
-                    <Button
-                      key={m}
-                      size="sm"
-                      variant={paymentMethod === m ? 'solid' : 'outline'}
-                      colorScheme={paymentMethod === m ? 'green' : undefined}
-                      borderColor={borderCol}
-                      textTransform="uppercase"
-                      onClick={() => setPaymentMethod(m)}
-                    >
-                      {m}
-                    </Button>
-                  ))}
-                </SimpleGrid>
-              </FormControl>
-
-              {/* If Cash: Quick Denominations & Calculator */}
-              {paymentMethod === 'cash' && (
-                <Box>
-                  <Text fontSize="xs" fontWeight="semibold" mb={2}>
-                    Quick Cash Presets
-                  </Text>
-                  <HStack spacing={2} mb={3}>
-                    {[currentTotal, 100, 200, 500, 2000].map((amt, idx) => (
                       <Button
-                        key={idx}
+                        mt={3}
                         size="xs"
-                        variant="outline"
-                        borderColor={borderCol}
-                        onClick={() => setTenderAmount(amt.toString())}
+                        w="100%"
+                        bg={inCartQty > 0 ? STAFF_COLORS.goldSubtle : 'transparent'}
+                        variant={inCartQty > 0 ? 'solid' : 'outline'}
+                        borderColor={STAFF_COLORS.borderGold}
+                        color={STAFF_COLORS.primaryGold}
+                        _hover={{ bg: STAFF_COLORS.goldSubtle }}
+                        borderRadius="xl"
+                        leftIcon={<FiPlus />}
+                        onClick={() => handleAddToCart(item)}
                       >
-                        ₹{amt}
+                        {inCartQty > 0 ? `In Cart (${inCartQty}) - Add More` : 'Add to Cart'}
                       </Button>
-                    ))}
-                  </HStack>
-
-                  <FormControl>
-                    <FormLabel fontSize="xs">Amount Tendered</FormLabel>
-                    <Input
-                      type="number"
-                      value={tenderAmount}
-                      onChange={(e) => setTenderAmount(e.target.value)}
-                      focusBorderColor={gold}
-                      fontSize="lg"
-                      fontWeight="bold"
-                    />
-                  </FormControl>
-
-                  {changeDue > 0 && (
-                    <Box mt={3} p={3} bg="green.500" color="white" borderRadius="lg" textAlign="center">
-                      <Text fontSize="xs" textTransform="uppercase" fontWeight="bold">
-                        Change Return to Customer
-                      </Text>
-                      <Heading size="md">₹{changeDue.toFixed(2)}</Heading>
                     </Box>
+                  );
+                })}
+              </SimpleGrid>
+            </VStack>
+          </Box>
+
+          {/* Right Column: Active POS Cart & Billing Summary */}
+          <Box
+            bg={STAFF_COLORS.card}
+            borderWidth="1px"
+            borderColor={STAFF_COLORS.border}
+            borderRadius="2xl"
+            p={5}
+            h="fit-content"
+            position="sticky"
+            top="80px"
+          >
+            <Flex justify="space-between" align="center" mb={3}>
+              <Text fontSize="sm" fontWeight="800" color={STAFF_COLORS.text} textTransform="uppercase">
+                POS Register Cart
+              </Text>
+              {cart.length > 0 && (
+                <Button size="xs" variant="ghost" colorScheme="red" onClick={handleClearCart}>
+                  Clear
+                </Button>
+              )}
+            </Flex>
+
+            {/* Order Type Toggle */}
+            <HStack spacing={2} mb={3}>
+              <Button
+                size="xs"
+                flex="1"
+                borderRadius="xl"
+                variant={orderType === 'takeaway' ? 'solid' : 'outline'}
+                bg={orderType === 'takeaway' ? STAFF_COLORS.primaryGold : 'transparent'}
+                color={orderType === 'takeaway' ? '#0B0B0D' : STAFF_COLORS.secondaryText}
+                borderColor={STAFF_COLORS.border}
+                onClick={() => setOrderType('takeaway')}
+              >
+                Takeaway
+              </Button>
+              <Button
+                size="xs"
+                flex="1"
+                borderRadius="xl"
+                variant={orderType === 'dine-in' ? 'solid' : 'outline'}
+                bg={orderType === 'dine-in' ? STAFF_COLORS.primaryGold : 'transparent'}
+                color={orderType === 'dine-in' ? '#0B0B0D' : STAFF_COLORS.secondaryText}
+                borderColor={STAFF_COLORS.border}
+                onClick={() => setOrderType('dine-in')}
+              >
+                Dine-In
+              </Button>
+            </HStack>
+
+            {/* Table Selection for Dine-in */}
+            {orderType === 'dine-in' && (
+              <Box mb={3}>
+                <Select
+                  size="sm"
+                  value={selectedTableId}
+                  onChange={(e) => setSelectedTableId(e.target.value)}
+                  bg={STAFF_COLORS.innerCard}
+                  borderColor={STAFF_COLORS.border}
+                  borderRadius="xl"
+                  color={STAFF_COLORS.text}
+                >
+                  <option value="" style={{ background: STAFF_COLORS.sidebar }}>Select Table...</option>
+                  {tables.map((tbl) => (
+                    <option key={tbl._id} value={tbl._id} style={{ background: STAFF_COLORS.sidebar }}>
+                      Table #{tbl.tableNumber} ({tbl.capacity} Seats)
+                    </option>
+                  ))}
+                </Select>
+              </Box>
+            )}
+
+            {/* Customer Inputs */}
+            <VStack spacing={2} align="stretch" mb={3}>
+              <SimpleGrid columns={2} spacing={2}>
+                <Input
+                  size="sm"
+                  placeholder="Customer Name"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  bg={STAFF_COLORS.innerCard}
+                  borderColor={STAFF_COLORS.border}
+                  borderRadius="xl"
+                  color={STAFF_COLORS.text}
+                />
+                <Input
+                  size="sm"
+                  placeholder="Phone"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  bg={STAFF_COLORS.innerCard}
+                  borderColor={STAFF_COLORS.border}
+                  borderRadius="xl"
+                  color={STAFF_COLORS.text}
+                />
+              </SimpleGrid>
+            </VStack>
+
+            <Divider borderColor={STAFF_COLORS.border} mb={3} />
+
+            {/* Items List in Cart */}
+            <Box maxH="220px" overflowY="auto" mb={3} pr={1}>
+              {cart.length === 0 ? (
+                <Box py={6} textAlign="center" borderRadius="xl" bg={STAFF_COLORS.innerCard}>
+                  <Text fontSize="xs" color={STAFF_COLORS.mutedText}>
+                    Register cart is empty. Add menu items from catalog.
+                  </Text>
+                </Box>
+              ) : (
+                <VStack spacing={2} align="stretch">
+                  {cart.map((item, idx) => (
+                    <Box
+                      key={idx}
+                      p={2.5}
+                      borderRadius="xl"
+                      bg={STAFF_COLORS.innerCard}
+                      borderWidth="1px"
+                      borderColor={STAFF_COLORS.border}
+                    >
+                      <Flex justify="space-between" align="center">
+                        <Box flex="1" pr={2}>
+                          <Text fontSize="xs" fontWeight="700" color={STAFF_COLORS.text}>
+                            {item.name}
+                          </Text>
+                          <Text fontSize="10px" color={STAFF_COLORS.primaryGold}>
+                            ₹{item.basePrice.toFixed(2)} × {item.quantity} = ₹{(item.basePrice * item.quantity).toFixed(2)}
+                          </Text>
+                        </Box>
+
+                        <HStack spacing={1}>
+                          <IconButton
+                            size="xs"
+                            variant="ghost"
+                            aria-label="Minus"
+                            icon={<FiMinus />}
+                            onClick={() => handleUpdateQty(idx, -1)}
+                          />
+                          <Text fontSize="xs" fontWeight="800" px={1}>
+                            {item.quantity}
+                          </Text>
+                          <IconButton
+                            size="xs"
+                            variant="ghost"
+                            aria-label="Plus"
+                            icon={<FiPlus />}
+                            onClick={() => handleUpdateQty(idx, 1)}
+                          />
+                          <IconButton
+                            size="xs"
+                            variant="ghost"
+                            colorScheme="red"
+                            aria-label="Remove"
+                            icon={<FiTrash2 />}
+                            onClick={() => handleRemoveFromCart(idx)}
+                          />
+                        </HStack>
+                      </Flex>
+                    </Box>
+                  ))}
+                </VStack>
+              )}
+            </Box>
+
+            {/* Totals Summary */}
+            <VStack spacing={1.5} align="stretch" fontSize="xs" mb={4}>
+              <Flex justify="space-between">
+                <Text color={STAFF_COLORS.secondaryText}>Subtotal</Text>
+                <Text color={STAFF_COLORS.text}>₹{cartSubtotal.toFixed(2)}</Text>
+              </Flex>
+              {cartDiscountAmount > 0 && (
+                <Flex justify="space-between" color={STAFF_COLORS.success}>
+                  <Text>Discount ({discountPercent}%)</Text>
+                  <Text>-₹{cartDiscountAmount.toFixed(2)}</Text>
+                </Flex>
+              )}
+              <Flex justify="space-between">
+                <Text color={STAFF_COLORS.secondaryText}>Taxes (CGST/SGST 5%)</Text>
+                <Text color={STAFF_COLORS.text}>₹{cartTax.toFixed(2)}</Text>
+              </Flex>
+              <Divider borderColor={STAFF_COLORS.border} my={1} />
+              <Flex justify="space-between" fontSize="sm">
+                <Text fontWeight="800" color={STAFF_COLORS.text}>Grand Total</Text>
+                <Text fontWeight="800" color={STAFF_COLORS.primaryGold} fontSize="md">
+                  ₹{cartTotal.toFixed(2)}
+                </Text>
+              </Flex>
+            </VStack>
+
+            {/* Actions */}
+            <VStack spacing={2} align="stretch">
+              <Button
+                bg={STAFF_COLORS.primaryGold}
+                color="#0B0B0D"
+                _hover={{ bg: STAFF_COLORS.lightGold }}
+                borderRadius="xl"
+                size="sm"
+                onClick={() => handleSubmitPosOrder(true)}
+                isLoading={isSubmittingPosOrder}
+                isDisabled={cart.length === 0}
+              >
+                Pay & Settle Instantly
+              </Button>
+
+              <Button
+                variant="outline"
+                borderColor={STAFF_COLORS.border}
+                borderRadius="xl"
+                size="sm"
+                onClick={() => handleSubmitPosOrder(false)}
+                isLoading={isSubmittingPosOrder}
+                isDisabled={cart.length === 0}
+              >
+                Create Order (Unpaid)
+              </Button>
+            </VStack>
+          </Box>
+        </SimpleGrid>
+      )}
+
+      {/* VIEW 3: ACTIVE UNPAID BILLS */}
+      {activeTab === 'bills' && (
+        <VStack spacing={4} align="stretch">
+          <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
+            <Box>
+              <Heading size="sm" color={STAFF_COLORS.text}>
+                Active Unpaid Bills ({unpaidOrders.length})
+              </Heading>
+              <Text fontSize="xs" color={STAFF_COLORS.secondaryText}>
+                Select an order to collect payment and generate the customer tax receipt.
+              </Text>
+            </Box>
+            <Badge colorScheme="red" px={3} py={1} borderRadius="full">
+              {unpaidOrders.length} Pending
+            </Badge>
+          </Flex>
+
+          <DataTable<IOrder>
+            columns={[
+              {
+                header: 'Order #',
+                cell: (o) => (
+                  <Text fontWeight="800" color={STAFF_COLORS.primaryGold} fontFamily="mono">
+                    #{o.orderNumber}
+                  </Text>
+                ),
+              },
+              {
+                header: 'Table / Mode',
+                cell: (o) => (
+                  <Badge colorScheme={o.orderType === 'dine-in' ? 'orange' : 'teal'}>
+                    {o.orderType === 'dine-in'
+                      ? `Table #${o.tableNumber || (o.tableId as any)?.tableNumber || '-'}`
+                      : 'Takeaway'}
+                  </Badge>
+                ),
+              },
+              {
+                header: 'Customer',
+                cell: (o) => <Text>{o.customerName || 'Walk-in'}</Text>,
+              },
+              {
+                header: 'Items',
+                cell: (o) => (
+                  <Text fontSize="xs" noOfLines={1} maxW="280px">
+                    {o.items?.map((i) => `${i.quantity}x ${i.name}`).join(', ')}
+                  </Text>
+                ),
+              },
+              {
+                header: 'Total Amount',
+                cell: (o) => (
+                  <Text fontWeight="800" color={STAFF_COLORS.primaryGold}>
+                    ₹{o.grandTotal?.toFixed(2)}
+                  </Text>
+                ),
+              },
+              {
+                header: 'Payment Status',
+                cell: (o) => <Badge colorScheme="red">UNPAID</Badge>,
+              },
+              {
+                header: 'Actions',
+                align: 'right',
+                cell: (o) => (
+                  <HStack spacing={2} justify="flex-end">
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      borderColor={STAFF_COLORS.border}
+                      leftIcon={<FiEye />}
+                      onClick={() => {
+                        setInspectedOrder(o);
+                        setIsDrawerOpen(true);
+                      }}
+                    >
+                      Details
+                    </Button>
+                    <Button
+                      size="xs"
+                      bg={STAFF_COLORS.primaryGold}
+                      color="#0B0B0D"
+                      _hover={{ bg: STAFF_COLORS.lightGold }}
+                      borderRadius="lg"
+                      onClick={() => handleOpenPayment(o)}
+                    >
+                      Process Payment
+                    </Button>
+                  </HStack>
+                ),
+              },
+            ]}
+            data={unpaidOrders}
+            emptyMessage="Zero unpaid checks. All orders have been settled."
+          />
+        </VStack>
+      )}
+
+      {/* VIEW 4: ALL ORDERS RECORD */}
+      {activeTab === 'orders' && (
+        <VStack spacing={4} align="stretch">
+          <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
+            <SearchBar
+              value={ordersSearchQuery}
+              onChange={setOrdersSearchQuery}
+              placeholder="Search by order # or guest..."
+              maxW="300px"
+            />
+            <Text fontSize="xs" color={STAFF_COLORS.secondaryText}>
+              Total {allOrders.length} orders
+            </Text>
+          </Flex>
+
+          <DataTable<IOrder>
+            columns={[
+              {
+                header: 'Order #',
+                cell: (o) => (
+                  <Text fontWeight="800" color={STAFF_COLORS.primaryGold} fontFamily="mono">
+                    #{o.orderNumber}
+                  </Text>
+                ),
+              },
+              {
+                header: 'Date & Time',
+                cell: (o) => (
+                  <Text fontSize="xs">
+                    {new Date(o.createdAt).toLocaleString('en-IN', {
+                      day: '2-digit',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </Text>
+                ),
+              },
+              {
+                header: 'Destination',
+                cell: (o) => (
+                  <Badge colorScheme={o.orderType === 'dine-in' ? 'orange' : 'teal'}>
+                    {o.orderType === 'dine-in' ? `Table #${o.tableNumber || '-'}` : 'Takeaway'}
+                  </Badge>
+                ),
+              },
+              {
+                header: 'Total',
+                cell: (o) => <Text fontWeight="700">₹{o.grandTotal?.toFixed(2)}</Text>,
+              },
+              {
+                header: 'Payment Status',
+                cell: (o) => (
+                  <Badge colorScheme={o.paymentStatus === 'paid' ? 'green' : 'red'}>
+                    {o.paymentStatus.toUpperCase()}
+                  </Badge>
+                ),
+              },
+              {
+                header: 'Action',
+                align: 'right',
+                cell: (o) => (
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    borderColor={STAFF_COLORS.border}
+                    leftIcon={<FiEye />}
+                    onClick={() => {
+                      setInspectedOrder(o);
+                      setIsDrawerOpen(true);
+                    }}
+                  >
+                    View
+                  </Button>
+                ),
+              },
+            ]}
+            data={allOrders.filter(
+              (o) =>
+                !ordersSearchQuery ||
+                o.orderNumber.includes(ordersSearchQuery) ||
+                (o.customerName && o.customerName.toLowerCase().includes(ordersSearchQuery.toLowerCase()))
+            )}
+            emptyMessage="No orders found."
+          />
+        </VStack>
+      )}
+
+      {/* VIEW 5: TRANSACTIONS AUDIT */}
+      {activeTab === 'transactions' && (
+        <VStack spacing={4} align="stretch">
+          <Heading size="sm" color={STAFF_COLORS.text}>
+            Audit Payment Transactions ({paidOrders.length})
+          </Heading>
+
+          <DataTable<IOrder>
+            columns={[
+              {
+                header: 'Order Reference',
+                cell: (o) => (
+                  <Text fontWeight="800" color={STAFF_COLORS.primaryGold} fontFamily="mono">
+                    #{o.orderNumber}
+                  </Text>
+                ),
+              },
+              {
+                header: 'Settlement Time',
+                cell: (o) => (
+                  <Text fontSize="xs">
+                    {new Date(o.updatedAt || o.createdAt).toLocaleString('en-IN')}
+                  </Text>
+                ),
+              },
+              {
+                header: 'Method',
+                cell: (o) => (
+                  <Badge colorScheme="yellow" textTransform="uppercase">
+                    {o.paymentMethod}
+                  </Badge>
+                ),
+              },
+              {
+                header: 'Amount Collected',
+                cell: (o) => (
+                  <Text fontWeight="800" color={STAFF_COLORS.success}>
+                    ₹{o.grandTotal?.toFixed(2)}
+                  </Text>
+                ),
+              },
+              {
+                header: 'Status',
+                cell: () => <Badge colorScheme="green">CLEARED</Badge>,
+              },
+              {
+                header: 'Receipt',
+                align: 'right',
+                cell: (o) => (
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    borderColor={STAFF_COLORS.border}
+                    leftIcon={<FaReceipt />}
+                    onClick={() => {
+                      setActiveReceiptOrder(o);
+                      onReceiptOpen();
+                    }}
+                  >
+                    Receipt
+                  </Button>
+                ),
+              },
+            ]}
+            data={paidOrders}
+            emptyMessage="No transaction logs recorded yet today."
+          />
+        </VStack>
+      )}
+
+      {/* VIEW 6: RECEIPTS & INVOICE LOOKUP */}
+      {activeTab === 'receipts' && (
+        <VStack spacing={4} align="stretch">
+          <Heading size="sm" color={STAFF_COLORS.text}>
+            Receipts & Tax Invoices
+          </Heading>
+
+          <DataTable<IOrder>
+            columns={[
+              {
+                header: 'Order #',
+                cell: (o) => (
+                  <Text fontWeight="800" color={STAFF_COLORS.primaryGold} fontFamily="mono">
+                    #{o.orderNumber}
+                  </Text>
+                ),
+              },
+              {
+                header: 'Date',
+                cell: (o) => (
+                  <Text fontSize="xs">
+                    {new Date(o.createdAt).toLocaleDateString('en-IN')}
+                  </Text>
+                ),
+              },
+              {
+                header: 'Customer',
+                cell: (o) => <Text>{o.customerName || 'Walk-in'}</Text>,
+              },
+              {
+                header: 'Total',
+                cell: (o) => <Text fontWeight="700">₹{o.grandTotal?.toFixed(2)}</Text>,
+              },
+              {
+                header: 'Status',
+                cell: (o) => (
+                  <Badge colorScheme={o.paymentStatus === 'paid' ? 'green' : 'orange'}>
+                    {o.paymentStatus.toUpperCase()}
+                  </Badge>
+                ),
+              },
+              {
+                header: 'Invoice',
+                align: 'right',
+                cell: (o) => (
+                  <Button
+                    size="xs"
+                    bg={STAFF_COLORS.primaryGold}
+                    color="#0B0B0D"
+                    _hover={{ bg: STAFF_COLORS.lightGold }}
+                    leftIcon={<FiPrinter />}
+                    onClick={() => {
+                      setActiveReceiptOrder(o);
+                      onReceiptOpen();
+                    }}
+                  >
+                    Print Receipt
+                  </Button>
+                ),
+              },
+            ]}
+            data={allOrders}
+            emptyMessage="No orders found."
+          />
+        </VStack>
+      )}
+
+      {/* VIEW 7: SHIFT REGISTER SUMMARY */}
+      {activeTab === 'shift' && (
+        <VStack spacing={6} align="stretch" maxW="3xl">
+          <Box p={6} borderRadius="2xl" bg={STAFF_COLORS.card} borderWidth="1px" borderColor={STAFF_COLORS.border}>
+            <Flex justify="space-between" align="center" mb={4}>
+              <Box>
+                <Heading size="md" color={STAFF_COLORS.primaryGold} fontFamily="heading">
+                  Shift Register Summary
+                </Heading>
+                <Text fontSize="xs" color={STAFF_COLORS.secondaryText}>
+                  Audit trail and cash reconciliation for current register drawer.
+                </Text>
+              </Box>
+              <Button size="xs" colorScheme="yellow" leftIcon={<FiPrinter />} onClick={handlePrintReceipt}>
+                Print Shift Report
+              </Button>
+            </Flex>
+
+            <Divider borderColor={STAFF_COLORS.border} mb={4} />
+
+            <VStack spacing={3} align="stretch" fontSize="sm">
+              <Flex justify="space-between">
+                <Text color={STAFF_COLORS.secondaryText}>Total Shift Revenue</Text>
+                <Text fontWeight="800" color={STAFF_COLORS.text} fontSize="md">
+                  ₹{stats.todaySales.toFixed(2)}
+                </Text>
+              </Flex>
+              <Flex justify="space-between">
+                <Text color={STAFF_COLORS.secondaryText}>Cash in Drawer</Text>
+                <Text fontWeight="800" color={STAFF_COLORS.primaryGold}>
+                  ₹{stats.cashCollection.toFixed(2)}
+                </Text>
+              </Flex>
+              <Flex justify="space-between">
+                <Text color={STAFF_COLORS.secondaryText}>Digital & Card Revenue</Text>
+                <Text fontWeight="800" color="blue.400">
+                  ₹{stats.onlineCollection.toFixed(2)}
+                </Text>
+              </Flex>
+              <Flex justify="space-between">
+                <Text color={STAFF_COLORS.secondaryText}>Cleared Transactions</Text>
+                <Text fontWeight="700">{stats.totalTxns} orders</Text>
+              </Flex>
+              <Flex justify="space-between">
+                <Text color={STAFF_COLORS.secondaryText}>Uncollected Pending Dues</Text>
+                <Text fontWeight="700" color="red.400">{stats.pendingPaymentsCount} orders</Text>
+              </Flex>
+            </VStack>
+          </Box>
+        </VStack>
+      )}
+
+      {/* Payment Settlement Modal (With Idempotency Lock) */}
+      <Modal isOpen={isPayOpen} onClose={onPayClose} size="md" isCentered>
+        <ModalOverlay backdropFilter="blur(6px)" bg="rgba(0,0,0,0.8)" />
+        <ModalContent
+          bg={STAFF_COLORS.sidebar}
+          borderColor={STAFF_COLORS.border}
+          borderWidth="1px"
+          borderRadius="2xl"
+          color={STAFF_COLORS.text}
+        >
+          <ModalHeader borderBottomWidth="1px" borderColor={STAFF_COLORS.border} fontSize="md">
+            Settle Check: Order #{targetOrderForPayment?.orderNumber}
+          </ModalHeader>
+          <ModalCloseButton color={STAFF_COLORS.secondaryText} />
+          <ModalBody py={5}>
+            <VStack spacing={4} align="stretch">
+              <Box p={3} borderRadius="xl" bg={STAFF_COLORS.card} borderWidth="1px" borderColor={STAFF_COLORS.border}>
+                <Flex justify="space-between" align="baseline">
+                  <Text fontSize="xs" color={STAFF_COLORS.secondaryText}>Grand Total Due</Text>
+                  <Text fontSize="xl" fontWeight="900" color={STAFF_COLORS.primaryGold}>
+                    ₹{targetOrderForPayment?.grandTotal.toFixed(2)}
+                  </Text>
+                </Flex>
+              </Box>
+
+              <Box>
+                <Text fontSize="xs" fontWeight="700" color={STAFF_COLORS.secondaryText} mb={2}>
+                  Payment Method:
+                </Text>
+                <RadioGroup value={paymentMethod} onChange={(val) => setPaymentMethod(val as PaymentMethod)}>
+                  <Stack direction="row" spacing={4}>
+                    <Radio value="cash" colorScheme="yellow">Cash</Radio>
+                    <Radio value="card" colorScheme="yellow">Card</Radio>
+                    <Radio value="upi" colorScheme="yellow">UPI / QR</Radio>
+                    <Radio value="wallet" colorScheme="yellow">Wallet</Radio>
+                  </Stack>
+                </RadioGroup>
+              </Box>
+
+              {paymentMethod === 'cash' ? (
+                <Box>
+                  <Text fontSize="xs" color={STAFF_COLORS.secondaryText} mb={1}>
+                    Tender Cash Received (₹):
+                  </Text>
+                  <Input
+                    size="sm"
+                    value={tenderAmount}
+                    onChange={(e) => setTenderAmount(e.target.value)}
+                    bg={STAFF_COLORS.innerCard}
+                    borderColor={STAFF_COLORS.border}
+                    borderRadius="xl"
+                    color={STAFF_COLORS.text}
+                  />
+                  {parseFloat(tenderAmount) >= (targetOrderForPayment?.grandTotal || 0) && (
+                    <Text fontSize="xs" color={STAFF_COLORS.success} mt={1} fontWeight="700">
+                      Change to Return: ₹{(parseFloat(tenderAmount) - (targetOrderForPayment?.grandTotal || 0)).toFixed(2)}
+                    </Text>
                   )}
                 </Box>
-              )}
-
-              {/* If UPI or Card: Txn Reference */}
-              {(paymentMethod === 'upi' || paymentMethod === 'card') && (
-                <FormControl>
-                  <FormLabel fontSize="xs">Transaction / Approval Reference (Optional)</FormLabel>
+              ) : (
+                <Box>
+                  <Text fontSize="xs" color={STAFF_COLORS.secondaryText} mb={1}>
+                    Transaction Reference / Auth Code:
+                  </Text>
                   <Input
-                    placeholder="e.g. UPI Ref / Last 4 digits"
+                    size="sm"
+                    placeholder="e.g. UPI Ref / POS Terminal Slip #"
                     value={txnRef}
                     onChange={(e) => setTxnRef(e.target.value)}
-                    focusBorderColor={gold}
+                    bg={STAFF_COLORS.innerCard}
+                    borderColor={STAFF_COLORS.border}
+                    borderRadius="xl"
+                    color={STAFF_COLORS.text}
                   />
-                </FormControl>
+                </Box>
               )}
             </VStack>
           </ModalBody>
-
-          <ModalFooter>
-            <HStack spacing={3}>
-              <Button variant="ghost" onClick={onPayClose}>
-                Cancel
-              </Button>
-              <Button
-                colorScheme="green"
-                leftIcon={<FiCheckCircle />}
-                isLoading={isProcessingPayment}
-                loadingText="Recording..."
-                onClick={handleProcessSettlement}
-              >
-                Confirm Payment & Issue Receipt
-              </Button>
-            </HStack>
+          <ModalFooter borderTopWidth="1px" borderColor={STAFF_COLORS.border}>
+            <Button variant="ghost" color={STAFF_COLORS.secondaryText} mr={3} onClick={onPayClose} size="sm">
+              Cancel
+            </Button>
+            <Button
+              bg={STAFF_COLORS.primaryGold}
+              color="#0B0B0D"
+              _hover={{ bg: STAFF_COLORS.lightGold }}
+              borderRadius="xl"
+              size="sm"
+              onClick={handleProcessPayment}
+              isLoading={isProcessingPayment}
+            >
+              Confirm Settlement
+            </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
 
-      {/* RECEIPT PREVIEW MODAL */}
-      <Modal isOpen={isReceiptOpen} onClose={onReceiptClose} size="md">
-        <ModalOverlay backdropFilter="blur(6px)" />
-        <ModalContent bg={cardBg} border="1px solid" borderColor={borderCol} borderRadius="2xl">
-          <ModalHeader>
-            <HStack>
-              <Icon as={FiFileText} color={gold} />
-              <Text>Customer Bill Receipt</Text>
-            </HStack>
+      {/* Official Tax Invoice & Thermal Receipt Modal */}
+      <Modal isOpen={isReceiptOpen} onClose={onReceiptClose} size="lg" isCentered>
+        <ModalOverlay backdropFilter="blur(6px)" bg="rgba(0,0,0,0.8)" />
+        <ModalContent
+          bg={STAFF_COLORS.sidebar}
+          borderColor={STAFF_COLORS.border}
+          borderWidth="1px"
+          borderRadius="2xl"
+          color={STAFF_COLORS.text}
+        >
+          <ModalHeader borderBottomWidth="1px" borderColor={STAFF_COLORS.border} className="no-print">
+            <Flex justify="space-between" align="center">
+              <Text fontSize="md">Customer Tax Invoice Receipt</Text>
+              <Button size="xs" colorScheme="yellow" leftIcon={<FiPrinter />} onClick={handlePrintReceipt}>
+                Print Receipt
+              </Button>
+            </Flex>
           </ModalHeader>
-          <ModalCloseButton />
+          <ModalCloseButton className="no-print" color={STAFF_COLORS.secondaryText} />
+          <ModalBody py={5}>
+            {activeReceiptOrder && (
+              <Box id="printable-order-receipt" p={3} bg="#FFFFFF" color="#0B0B0D" borderRadius="xl">
+                <VStack spacing={3} align="stretch" textAlign="center">
+                  <Box borderBottomWidth="2px" borderColor="#000000" pb={2}>
+                    <Text fontWeight="900" fontSize="lg" letterSpacing="widest">
+                      VYNTRA CAFE
+                    </Text>
+                    <Text fontSize="10px" textTransform="uppercase">
+                      Haute Gastronomie & Artisanal Roastery
+                    </Text>
+                    <Text fontSize="9px">GSTIN: 29AABCU9603R1ZV • Ph: +91 98765 43210</Text>
+                  </Box>
 
-          <ModalBody>
-            {receiptData ? (
-              <VStack
-                spacing={3}
-                align="stretch"
-                p={4}
-                bg={useColorModeValue('blackAlpha.50', 'whiteAlpha.50')}
-                borderRadius="xl"
-                fontFamily="mono"
-                fontSize="xs"
-              >
-                <VStack spacing={0} textAlign="center">
-                  <Heading size="sm" fontFamily="heading">
-                    VYNTRA CAFE
-                  </Heading>
-                  <Text fontSize="10px">Premium Dining & Specialty Brews</Text>
-                  <Text fontSize="10px">GSTIN: 27AABCV1234F1Z0</Text>
-                </VStack>
+                  <SimpleGrid columns={2} spacing={1} fontSize="xs" textAlign="left" pt={1}>
+                    <Text>Order #{activeReceiptOrder.orderNumber}</Text>
+                    <Text textAlign="right">{new Date(activeReceiptOrder.createdAt).toLocaleDateString('en-IN')}</Text>
+                    <Text>Mode: {activeReceiptOrder.orderType.toUpperCase()}</Text>
+                    <Text textAlign="right">Table: {activeReceiptOrder.tableNumber || 'Takeaway'}</Text>
+                  </SimpleGrid>
 
-                <Divider borderColor={borderCol} />
+                  <Table size="sm" variant="simple" my={1}>
+                    <Thead>
+                      <Tr borderBottomWidth="1px" borderColor="#000000">
+                        <Th color="#000000" px={1} fontSize="10px">Item</Th>
+                        <Th color="#000000" px={1} textAlign="center" fontSize="10px">Qty</Th>
+                        <Th color="#000000" px={1} textAlign="right" fontSize="10px">Rate</Th>
+                        <Th color="#000000" px={1} textAlign="right" fontSize="10px">Total</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {activeReceiptOrder.items?.map((it, idx) => (
+                        <Tr key={idx} borderBottomWidth="1px" borderColor="#EEEEEE">
+                          <Td px={1} py={1} fontSize="11px" fontWeight="600">{it.name}</Td>
+                          <Td px={1} textAlign="center" fontSize="11px">{it.quantity}</Td>
+                          <Td px={1} textAlign="right" fontSize="11px">₹{(it.unitPrice || it.basePrice).toFixed(2)}</Td>
+                          <Td px={1} textAlign="right" fontSize="11px" fontWeight="700">₹{it.itemTotal.toFixed(2)}</Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
 
-                <Flex justify="space-between">
-                  <Text>Receipt #: {receiptData.billNumber || 'REC-001'}</Text>
-                  <Text>{new Date().toLocaleDateString()}</Text>
-                </Flex>
-
-                <Flex justify="space-between">
-                  <Text>Order: #{receiptData.order?.orderNumber || 'ORD-NEW'}</Text>
-                  <Text>Type: {receiptData.order?.orderType?.toUpperCase()}</Text>
-                </Flex>
-
-                <Divider borderColor={borderCol} />
-
-                {/* Items */}
-                <VStack align="stretch" spacing={1}>
-                  {(receiptData.order?.items || []).map((it: any, idx: number) => (
-                    <Flex key={idx} justify="space-between">
-                      <Text>
-                        {it.quantity}x {it.name}
-                      </Text>
-                      <Text>₹{(it.unitPrice * it.quantity).toFixed(2)}</Text>
+                  <VStack spacing={1} align="stretch" fontSize="xs" pt={1} textAlign="left">
+                    <Flex justify="space-between">
+                      <Text>Subtotal:</Text>
+                      <Text fontWeight="600">₹{activeReceiptOrder.subtotal?.toFixed(2)}</Text>
                     </Flex>
-                  ))}
+                    <Flex justify="space-between">
+                      <Text>GST Taxes (5%):</Text>
+                      <Text fontWeight="600">₹{activeReceiptOrder.taxAmount?.toFixed(2)}</Text>
+                    </Flex>
+                    <Divider borderColor="#000000" my={1} />
+                    <Flex justify="space-between" fontSize="sm" fontWeight="900">
+                      <Text>GRAND TOTAL:</Text>
+                      <Text>₹{activeReceiptOrder.grandTotal?.toFixed(2)}</Text>
+                    </Flex>
+                    <Flex justify="space-between" fontSize="xs">
+                      <Text>Settled Via:</Text>
+                      <Text textTransform="uppercase">{activeReceiptOrder.paymentMethod} - PAID</Text>
+                    </Flex>
+                  </VStack>
+
+                  <Box pt={3} borderTopWidth="1px" borderColor="#EEEEEE">
+                    <Text fontSize="10px" fontWeight="700">
+                      Thank You For Visiting Vyntra Cafe!
+                    </Text>
+                  </Box>
                 </VStack>
-
-                <Divider borderColor={borderCol} />
-
-                <Flex justify="space-between">
-                  <Text>Subtotal:</Text>
-                  <Text>₹{receiptData.order?.subtotal?.toFixed(2)}</Text>
-                </Flex>
-                <Flex justify="space-between">
-                  <Text>Tax (GST):</Text>
-                  <Text>₹{receiptData.order?.taxAmount?.toFixed(2)}</Text>
-                </Flex>
-                <Flex justify="space-between" fontWeight="bold" fontSize="sm">
-                  <Text>PAID IN FULL:</Text>
-                  <Text>₹{receiptData.order?.grandTotal?.toFixed(2)}</Text>
-                </Flex>
-
-                <Divider borderColor={borderCol} />
-                <Text textAlign="center" fontSize="10px">
-                  Thank you for dining with Vyntra Cafe!
-                </Text>
-              </VStack>
-            ) : (
-              <Text fontSize="sm" color={mutedCol}>
-                Loading receipt details...
-              </Text>
+              </Box>
             )}
           </ModalBody>
-
-          <ModalFooter>
-            <HStack spacing={3}>
-              <Button
-                variant="outline"
-                borderColor={gold}
-                color={gold}
-                leftIcon={<FiPrinter />}
-                onClick={() => window.print()}
-              >
-                Print Slip
-              </Button>
-              <Button colorScheme="green" onClick={onReceiptClose}>
-                Done
-              </Button>
-            </HStack>
+          <ModalFooter borderTopWidth="1px" borderColor={STAFF_COLORS.border} className="no-print">
+            <Button variant="ghost" onClick={onReceiptClose} size="sm">
+              Close
+            </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+      {/* Shared Order Details Drawer */}
+      <OrderDetailsDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        order={inspectedOrder}
+        role="cashier"
+        onAction={(action, ord) => {
+          if (action === 'process_payment') {
+            handleOpenPayment(ord);
+            setIsDrawerOpen(false);
+          }
+        }}
+      />
+
+      {/* Thermal & Page Print CSS */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #printable-order-receipt, #printable-order-receipt * {
+            visibility: visible !important;
+          }
+          #printable-order-receipt {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            background: #FFFFFF !important;
+            color: #000000 !important;
+            padding: 16px !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
     </CashierLayout>
   );
 };
-

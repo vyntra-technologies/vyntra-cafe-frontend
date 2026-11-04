@@ -57,6 +57,7 @@ import { AdminLayout } from '../../components/admin/AdminLayout';
 import { menuService } from '../../services/menu.service';
 import { categoryService } from '../../services/category.service';
 import { uploadService } from '../../services/upload.service';
+import { ImageUpload } from '../../components/upload/ImageUpload';
 import { IMenuItem, ICategory, IMenuVariant, IMenuAddOn } from '../../types';
 
 export const AdminMenuPage: React.FC = () => {
@@ -88,6 +89,7 @@ export const AdminMenuPage: React.FC = () => {
     basePrice: 0,
     preparationTimeMinutes: 15,
     imageUrl: '',
+    imagePublicId: '',
     isVegetarian: false,
     isVegan: false,
     isGlutenFree: false,
@@ -154,6 +156,7 @@ export const AdminMenuPage: React.FC = () => {
       basePrice: 199,
       preparationTimeMinutes: 15,
       imageUrl: '',
+      imagePublicId: '',
       isVegetarian: false,
       isVegan: false,
       isGlutenFree: false,
@@ -175,6 +178,7 @@ export const AdminMenuPage: React.FC = () => {
       basePrice: item.basePrice,
       preparationTimeMinutes: item.preparationTimeMinutes || 15,
       imageUrl: item.images?.[0] || '',
+      imagePublicId: (item as any).imagePublicIds?.[0] || '',
       isVegetarian: item.isVegetarian || false,
       isVegan: item.isVegan || false,
       isGlutenFree: item.isGlutenFree || false,
@@ -185,27 +189,6 @@ export const AdminMenuPage: React.FC = () => {
     setVariants(item.variants || []);
     setAddOns(item.addOns || []);
     onFormOpen();
-  };
-
-  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      setUploadingImage(true);
-      const url = await uploadService.uploadSingle(file);
-      setFormData((prev) => ({ ...prev, imageUrl: url }));
-      toast({ title: 'Image uploaded successfully', status: 'success', duration: 2000 });
-    } catch (err: any) {
-      toast({
-        title: 'Image upload failed',
-        description: 'Ensure file is under 5MB (PNG/JPG)',
-        status: 'error',
-        duration: 3000,
-      });
-    } finally {
-      setUploadingImage(false);
-    }
   };
 
   const handleToggleAvailability = async (item: IMenuItem) => {
@@ -234,13 +217,14 @@ export const AdminMenuPage: React.FC = () => {
 
     try {
       setIsSubmitting(true);
-      const payload: Partial<IMenuItem> = {
+      const payload: any = {
         name: formData.name,
         category: formData.category,
         description: formData.description,
         basePrice: Number(formData.basePrice),
         preparationTimeMinutes: Number(formData.preparationTimeMinutes),
         images: formData.imageUrl ? [formData.imageUrl] : [],
+        imagePublicIds: formData.imagePublicId ? [formData.imagePublicId] : [],
         isVegetarian: formData.isVegetarian,
         isVegan: formData.isVegan,
         isGlutenFree: formData.isGlutenFree,
@@ -634,31 +618,22 @@ export const AdminMenuPage: React.FC = () => {
                   </FormControl>
                 </SimpleGrid>
 
-                {/* Image Upload / URL */}
+                {/* Cloudinary Image Upload */}
                 <FormControl>
-                  <FormLabel fontSize="xs" color={mutedColor}>Dish Image URL or File</FormLabel>
-                  <HStack spacing={3}>
-                    <Input
-                      placeholder="https://images.unsplash.com/..."
-                      value={formData.imageUrl}
-                      onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                      bg={innerCardBg}
-                      borderColor={borderColor}
-                      fontSize="sm"
-                    />
-                    <Button
-                      as="label"
-                      leftIcon={<FiUpload />}
-                      variant="outline"
-                      borderColor={borderColor}
-                      size="md"
-                      cursor="pointer"
-                      isLoading={uploadingImage}
-                    >
-                      Upload
-                      <input type="file" accept="image/*" hidden onChange={handleImageFileChange} />
-                    </Button>
-                  </HStack>
+                  <FormLabel fontSize="xs" color={mutedColor}>Dish Image (Cloudinary)</FormLabel>
+                  <ImageUpload
+                    value={formData.imageUrl}
+                    publicId={formData.imagePublicId}
+                    onChange={(url, publicId) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        imageUrl: url,
+                        imagePublicId: publicId || '',
+                      }))
+                    }
+                    folder="menu"
+                    label="Upload Dish Image"
+                  />
                 </FormControl>
 
                 {/* Dietary & Highlight Flags */}
@@ -756,4 +731,4 @@ export const AdminMenuPage: React.FC = () => {
     </AdminLayout>
   );
 };
-
+export default AdminMenuPage;

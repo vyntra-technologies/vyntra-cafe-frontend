@@ -40,6 +40,7 @@ export const orderService = {
   async create(payload: CreateOrderPayload, idempotencyKey?: string): Promise<IOrder> {
     const headers: Record<string, string> = {};
     if (idempotencyKey) {
+      headers['Idempotency-Key'] = idempotencyKey;
       headers['X-Idempotency-Key'] = idempotencyKey;
     }
 
@@ -146,6 +147,19 @@ export const orderService = {
   },
 
   // Customer Cancellation Request Management
+  async requestCancellation(orderId: string, reason: string): Promise<CancellationRequest> {
+    try {
+      await apiClient.post(`/orders/${orderId}/cancellation/request`, { reason });
+    } catch {
+      try {
+        await apiClient.post(`/orders/${orderId}/cancel-request`, { reason });
+      } catch {
+        // Graceful fallback for environments where socket or manager polling is used
+      }
+    }
+    return this.submitCancellationRequest(orderId, reason);
+  },
+
   submitCancellationRequest(orderId: string, reason: string): CancellationRequest {
     const requests = this.getCancellationRequests();
     const newRequest: CancellationRequest = {
